@@ -1,11 +1,11 @@
 # ignore compiled python files
-.pyc
+*.pyc
 
 # ignore any APK's used for testing
-.apk
+*.apk
 
 # ignore log file
-.log
+*.log
 
 # ignore python files in scripts directory
-/files/scripts
+/files/scripts/*
