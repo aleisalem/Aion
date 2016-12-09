@@ -1,1 +1,0 @@
-var apiGroups = {"groups": [{"name": "Storage", "subgroups": [{"name": "Fs"}, {"name": "Pref"}]}]};
