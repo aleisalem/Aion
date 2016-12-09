@@ -1,0 +1,23 @@
+===================================
+| Using Google Play API in Python |
+===================================
+
+[*] from googleplay_api.googleplay import GooglePlayAPI
+
+[*] Instantiate an object:	api = GooglePlayAPI()
+[*] Login "GooglePlay":		api.login(GOOGLE_LOGIN, GOOGLE_PASSWORD, AUTH_TOKEN)
+[*] Browse categories "api.browse()":
+    > returns categories e.g. "cats"
+    > "cats.category" --> a list of categories as "BrowseLink" objects
+    > "for x in cats" --> "x.name", "x.dataUrl" e.g. "browse?c=3&cat=ANDROID"
+
+[*] Browse subcategories "api.list([category])":
+    > returns subcategories e.g. "sub"
+    > "sub.doc" --> a list of subcategories as "DocV2" objects
+    > "for x in sub.doc" --> "x.title" e.g. "TopApps", "x.docid" e.g. "apps_topselling_free"
+
+[*] Browse apps in subcategory "api.list([category], [subcategory])":
+    > "apps = api.list("c", "s").doc" --> one DocV2 element
+    > "for x in apps.doc[0].child" --> "x.title" = app name, "x.aggregateRating.starRating", "x.docid" = app id e.g. com.whatsapp, "x.details.versionCode", "x.offer[0].offerType", "x.offer[0].formattedAmount" e.g. price, "x.details.appDetails.installationSize".
+    > "api.download(x.docid, vc, ot)"
+    
