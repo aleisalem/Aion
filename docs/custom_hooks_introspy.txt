@@ -1,0 +1,96 @@
+--------------------------------------------------------
+| Classes and methods to hook and their argument types |
+--------------------------------------------------------
+
+[*] android.app.Activity:
+        > startActivity(Intent, Bundle)
+        > setContentView(View [, ViewGroup.LayoutParams])
+        > setVisible(boolean)
+        > takeKeyEvents(boolean)
+
+[*] android.app.AlertDialog:
+        > setView(View [,int, int, int, int])
+
+[*] android.app.Dialog:
+        > setContentView(~)
+        > setView(~)
+        > show()
+
+[*] android.app.DownloadManager:
+        > addCompletedDownload(String, String, boolean, String, String, long, boolean)
+        > enqueue(DownloadManager.Request)
+        > getUriForDownloadedFile(long)
+        > openDownloadedFile(long)
+        > query(DownloadManager.query)
+
+[*] android.app.IntentService:
+        > onStartCommand(Intent, int, int)
+
+
+[*] android.content.BroadcastReceiver:
+        > goAsync()
+        > onReceive(Context, Intent)
+
+[*] android.content.ContentProvider:
+        > delete(Uri, String, String[])
+        > insert(Uri, ContentValues)
+        > openFile(Uri, String)
+        > query(Uri, String[], String, String[], String [, CancellationSignal])
+        > update(Uri, ContentValues, String, String[]) 
+
+[*] android.content.ContextWrapper:
+        > bindService(Intent, ServiceConnection, int)
+        > deleteFile(String)
+        > moveDatabaseFrom(Context, String)
+        > openFileInput(String)
+        > openFileOutput(String)
+        > openOrCreateDatabase(String, int, SQLiteDatabase.CursorFactory [, DatabaseErrorHandler])
+        > registerReceiver(BroadcastReceiver, IntentFilter [, String, Handler])
+        > sendBroadcast(Intent [, String])
+        > startActivity(Intent [, Bundle])
+        > startService(Intent)
+        > stopService(Intent)
+        > unbindService(ServiceConnection)
+        > unregisterReceiver(BroadcastReceiver)
+
+[*] android.hardware.Camera:
+        > open([int])
+        > reconnect()
+        > release()
+        > startPreview()
+        > stopPreview()
+        > takePicture(Camera.ShutterCallback, Camera.PictureCallback, Camera.PictureCallback [, Camera.PictureCallback])
+        
+[*] android.location.Location:
+        > getLatitude()
+        > getLongitude()
+
+
+[*] android.media.AudioRecord:
+        > read(short[], int, int)
+        > read(ByteBuffer, int)
+        > read(byte[], int, int)
+        > startRecording()
+        > stop()
+
+[*] android.media.MediaRecorder:
+        > prepare()
+        > setCamera(Camera)
+        > start()
+        > stop()
+
+[*] android.net.wifi.WifiManager:
+        > disconnect()
+        > getScanResults()
+        > getWifiState()
+        > reconnect()
+        > startScan()
+
+[*] android.os.Process:
+        > killProcess(int)
+        
+
+[*] android.telephony.SmsManager:
+        > sendDataMessage(String, String, short, byte[], PendingIntent, PendingIntent)
+        > sendTextMessage(String, String, String, PendingIntent, PendingItent)
+
