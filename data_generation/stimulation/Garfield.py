@@ -16,13 +16,14 @@ from androguard.misc import AXMLPrinter
 class Garfield():
     """ Garfield is a lazy stimulation engine based on fuzzing via Monkey(runner) and Genymotion """
     
-    def __init__(self, pathToAPK):
+    def __init__(self, pathToAPK, APKType="goodware"):
         if not os.path.exists(pathToAPK):
              raise APKNotFoundException("APK file \"%s\" does not exist" % pathToAPK)
         self.APKPath = pathToAPK
         self.APK, self.DEX, self.VMAnalysis = None, None, None
         self.activitiesInfo, self.servicesInfo, self.receiversInfo = {}, {}, {}
         self.runnerScript = ""
+        self.APKType = APKType
    
     def analyzeAPK(self):
         """ Uses androguard to retrieve metadata about the app e.g. activities, permissions, intent filters, etc. """
@@ -177,18 +178,34 @@ def analyzeActivities(APK, DEX):
             # 3.a. Identify the layout file's ID in the class' setContentView function call
             source = info[activity]["classes"][0].get_source()
             info[activity].pop("classes") # TODO: Do we really need a reference to the class object?
-            index1 = source.find("onCreate(")
+            index1 = source.find("void onCreate(")
             index2 = source.find("setContentView(", index1) + len("setContentView(")
             layoutID = ""
             while str.isdigit(source[index2]):
                 layoutID += source[index2]
                 index2 += 1
+            # layoutID retrieved?
+            if len(layoutID) < 1:
+                prettyPrint("Could not retrieve layout ID from activity class. Skipping", "warning")
+                continue
             # 3.b. Look for the corresponding layout name in the R$layout file
             layoutClass = DEX.get_class(str("L%s/R$layout;" % APK.package.replace('.','/')))
-            layoutContent = layoutClass.get_source() 
-            eIndex = layoutContent.find(layoutID)
-            sIndex = layoutContent.rfind("int", 0, eIndex)
-            layoutName = layoutContent[sIndex+len("int"):eIndex].replace(' ','').replace('=','')
+            if layoutClass:
+                layoutContent = layoutClass.get_source() 
+                eIndex = layoutContent.find(layoutID)
+                sIndex = layoutContent.rfind("int", 0, eIndex)
+                layoutName = layoutContent[sIndex+len("int"):eIndex].replace(' ','').replace('=','')
+            else:
+                # No layout class was found: Check the public.xml file
+                prettyPrint("Could not find a \"R$layout\" class. Checking \"public.xml\"", "warning")
+                apkResources = APK.get_android_resources()
+                publicResources = apkResources.get_public_resources(APK.package).split('\n')
+                layoutIDHex = hex(int(layoutID))
+                for line in publicResources:
+                    if line.find(layoutIDHex) != -1:
+                        sIndex = line.find("name=\"") + len("name=\"")
+                        eIndex = line.find("\"", sIndex)
+                        layoutName = line[sIndex:eIndex]
             # 3.c. Retrieve layout file and get XML object
             if len(layoutName) < 1:
                 prettyPrint("Could not retrieve a layout file for \"%s\". Skipping" % activity, "warning")

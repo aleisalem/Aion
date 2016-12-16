@@ -5,7 +5,7 @@ from Aion.utils.graphics import *
 
 def getProjectDir():
     """Returns the absolute path of the project"""
-    return config.Aion_DIR
+    return config.AION_DIR
 
 def loggingON():
     """ Returns whether logging is on """
