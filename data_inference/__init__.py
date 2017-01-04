@@ -1,1 +1,1 @@
-__all__ = [ "projection", "inference", "training"]
+__all__ = [ "projection", "extraction", "learning"]

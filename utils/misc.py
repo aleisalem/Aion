@@ -34,3 +34,19 @@ def sizeof_fmt(num):
             return "%3.1f%s" % (num, x)
         num /= 1024.0
 
+def specificity_score(ground_truth, predicted, classes=(1, 0)):
+    if len(ground_truth) != len(predicted):
+        return -1
+    positive, negative = classes[0], classes[1]
+    tp, tn, fp, fn = 0, 0, 0, 0
+    for index in range(len(ground_truth)):
+        if ground_truth[index] == negative and predicted[index] == negative:
+            tn += 1
+        elif ground_truth[index] == negative and predicted[index] == positive:
+            fp += 1
+        elif ground_truth[index] == positive and predicted[index] == negative:
+            fn += 1
+        else:
+            tp += 1
+
+    return float(tn)/(float(tn)+float(fp))

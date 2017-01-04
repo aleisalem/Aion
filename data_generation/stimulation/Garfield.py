@@ -76,9 +76,11 @@ class Garfield():
             # Connect to the current device and install package
             monkeyScript.write("print \"[*] Connecting to device.\"\n")
             monkeyScript.write("device = MonkeyRunner.waitForConnection()\n")
+            monkeyScript.write("package = '%s'\n" % self.APK.package)
+            monkeyScript.write("print \"[*] Uninstalling package %s (if exists)\"\n" % self.APK.package)
+            monkeyScript.write("device.removePackage(package)\n")
             monkeyScript.write("print \"[*] Installing package %s\"\n" % self.APK.package)
             monkeyScript.write("device.installPackage('%s')\n" % self.APKPath)
-            monkeyScript.write("package = '%s'\n" % self.APK.package)
             # Configure introspy for hooking and monitoring
             monkeyScript.write("print \"[*] Configuring Introspy\"\n")
             monkeyScript.write("device.shell(\"echo 'GENERAL CRYPTO,KEY,HASH,FS,IPC,PREF,URI,WEBVIEW,SSL' > /data/data/%s/introspy.config\" % package)\n")
@@ -143,8 +145,8 @@ class Garfield():
             monkeyScript.write("\t\t\t\tprint \"[*] Broadcasting intent: %s\" % intentAction\n")
             monkeyScript.write("\t\t\t\tdevice.broadcastIntent(currentReceiver, intentAction)\n")
             # Sleep for 0.5 a second
-            monkeyScript.write("\ttime.sleep(0.5)\n")
-            # TODO: Uninstall package (Can crash app if it's not done with computations)
+            monkeyScript.write("\ttime.sleep(1)\n")
+            # Uninstall package (Still need to fetch the introspy.db file from app directory before uninstallation)
             #monkeyScript.write("device.removePackage(package)\n")
         
         except Exception as e:
@@ -176,6 +178,9 @@ def analyzeActivities(APK, DEX):
             
             # 3. Get UI elements in every activity
             # 3.a. Identify the layout file's ID in the class' setContentView function call
+            if len(info[activity]["classes"]) < 1:
+                prettyPrint("Could not retrieve any Activity classes. Skipping", "warning")
+                continue
             source = info[activity]["classes"][0].get_source()
             info[activity].pop("classes") # TODO: Do we really need a reference to the class object?
             index1 = source.find("void onCreate(")

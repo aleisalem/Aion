@@ -1,1 +1,1 @@
-__all__ = ["Trace"]
+__all__ = ["Trace", "Numerical"]

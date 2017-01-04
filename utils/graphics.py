@@ -34,7 +34,7 @@ def prettyPrint(msg, mode="info"):
     #print("\033[1;%sm%s\n%s\033[1;m" % (color, msg, '-'*len(msg))) # Print dashes under the message
     print("\033[1;%sm%s\033[1;m" % (color, msg))
     # Log the message if LOGGING is enabled
-    if config.LOGGING == "ON":
+    if loggingON():
         logEvent("%s: %s" % (getTimestamp(includeDate=True), msg))
 
 def prettyPrintError(ex):
