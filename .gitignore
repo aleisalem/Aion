@@ -10,5 +10,8 @@
 # ignore .swp files
 *.swp
 
+# ignore configuration file
+conf/*
+
 # ignore python files in scripts directory
-/files/scripts/*
+files/scripts/*
