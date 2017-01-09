@@ -311,6 +311,14 @@ def main():
             # Increment the iteration for further analysis
             iteration += 1
             
+        # Final Results
+        prettyPrint("Results after %s iterations" % iteration, "output")
+        prettyPrint("Accuracy: %s" % currentMetrics["accuracy"], "output")
+        prettyPrint("Recall: %s" % currentMetrics["recall"], "output")
+        prettyPrint("Specificity: %s" % currentMetrics["specificity"], "output")
+        prettyPrint("Precision: %s" % currentMetrics["precision"], "output")
+        prettyPrint("F1 Score: %s" % currentMetrics["f1score"], "output")
+
     except Exception as e:
         prettyPrintError(e)
         return False
