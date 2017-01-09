@@ -3,6 +3,7 @@
 from Aion.data_generation.stimulation.Garfield import Garfield
 from Aion.data_generation.reconstruction import *
 from Aion.data_inference.learning import HMM, ScikitLearners
+from Aion.data_inference.extraction.featureExtraction import *
 from Aion.utils.data import *     # Needed for accessing configuration files
 from Aion.utils.graphics import * # Needed for pretty printing
 from Aion.utils.misc import *
@@ -44,11 +45,11 @@ def main():
              return False
  
         iteration = 1 # Initial values
-        currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "fscore": 0.0}
-        previousMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "fscore": 0.0}
+        currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
+        previousMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
+        reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
 
-
-        while currentMetrics["fscore"] >= previousMetrics["fscore"]:
+        while currentMetrics["f1score"] >= previousMetrics["f1score"]:
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             if arguments.analyzeapks == "yes" or iteration >= 2:
                 # Define paths to Android SDK tools
@@ -56,24 +57,24 @@ def main():
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
 
                 # Retrieve malware APK's
-                malAPKs = glob.glob("%s/*.apk" % arguments.malwaredir)
+                malAPKs = reanalyzeMalware if iterations > 1 and len(reanalyzeMalware) > 0 else glob.glob("%s/*.apk" % arguments.malwaredir)
                 if len(malAPKs) < 1:
-                    prettyPrint("Could not find any malicious APK's under \"%s\"" % arguments.malwaredir, "warning")
+                    prettyPrint("Could not find any malicious APK's" , "warning")
                 else:
-                    prettyPrint("Successfully retrieved %s malicious instances from \"%s\"" % (len(malAPKs), arguments.malwaredir))
+                    prettyPrint("Successfully retrieved %s malicious instances" % len(malAPKs))
                 # Retrieve goodware APK's
-                goodAPKs = glob.glob("%s/*.apk" % arguments.goodwaredir)
+                goodAPKs = reanalyzeGoodware if iterations > 1 and len(reanalyzeGoodware) > 0 else glob.glob("%s/*.apk" % arguments.goodwaredir)
                 if len(goodAPKs) < 1:
-                    prettyPrint("Could not find any malicious APK's under \"%s\"" % arguments.goodwaredir, "warning")
+                    prettyPrint("Could not find any malicious APK's", "warning")
                 else:
-                    prettyPrint("Successfully retrieved %s malicious instances from \"%s\"" % (len(goodAPKs), arguments.goodwaredir))
+                    prettyPrint("Successfully retrieved %s benign instances" % len(goodAPKs))
 
                 allAPKs = malAPKs + goodAPKs
                 if len(allAPKs) < 1:
-                    prettyPrint("Could not find any APK's under \"%s\". Exiting" % arguments.indir, "error")
+                    prettyPrint("Could not find any APK's to analyze", "error")
                     return False
 
-                genyProcess = None # TODO: A handle to the genymotion player process
+                genyProcess = None # A (dummy) handle to the genymotion player process
                 for path in allAPKs:
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
@@ -165,26 +166,27 @@ def main():
                     # 7. Write trace to malware/goodware dir
                     # 7.a. Get a handle
                     if currentAPK.APKType == "malware": 
-                        traceFile = open("%s/%s_%s.json" % (arguments.malwaredir, currentAPK.APK.package, currentAPK.APKType), "w")
+                        traceFile = open("%s/%s_%s.%s" % (arguments.malwaredir, currentAPK.APK.package, currentAPK.APKType, arguments.fileextension), "w")
                     else:
-                        traceFile = open("%s/%s_%s.json" % (arguments.malwaredir, currentAPK.APK.package, currentAPK.APKType), "w")
+                        traceFile = open("%s/%s_%s.%s" % (arguments.malwaredir, currentAPK.APK.package, currentAPK.APKType, arguments.fileextension), "w")
                     # 7.b. Write content
                     traceFile.write(trace)
                     traceFile.close()
 
                     # 7.c. Introspy's HTML report
                     html = introspy.HTMLReportGenerator(db, "foobar") # Second arguments needs to be anythin but ""/None
-                    if currentAPK.APK.package == "malware":
-                        html.write_report_to_directory("%s/%s" % (arguments.malwaredir, currentAPK.APK.package))
-                    else:
-                        html.write_report_to_directory("%s/%s" % (arguments.goodwaredir, currentAPK.APK.package))
+                    targetDir = "%s/%s" % (arguments.malwaredir, currentAPK.APK.package) if currentAPK.APKType == "malware" else "%s/%s" % (arguments.goodwaredir, currentAPK.APK.package)
+                    if os.path.exists(targetDir):
+                        shutil.rmtree(targetDir)
+                    # Save new report
+                    html.write_report_to_directory(targetDir)
                 
                     # 7.d. Extract and save numerical features for SVM's and Trees
-                    features = extractAndroguardFeatures(path) + extractIntrospyFeatures(traceFile)
+                    features = extractAndroguardFeatures(path) + extractIntrospyFeatures(traceFile.name)
                     if currentAPK.APKType == "malware":
-                        featuresFile = open("%s/%s.%s" % (arguments.malwaredir, currentAPK.APK.package, arguments.fileextension), "w")
+                        featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredir, currentAPK.APK.package, currentAPK.APKType, arguments.fileextension), "w")
                     else:
-                        featuresFile = open("%s/%s.%s" % (arguments.goodwaredir, currentAPK.APK.package, arguments.fileextension), "w")
+                        featuresFile = open("%s/%s_%s.%s" % (arguments.goodwaredir, currentAPK.APK.package, currentAPK.APKType, arguments.fileextension), "w")
 
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
@@ -203,11 +205,11 @@ def main():
             ####################################################################
             if arguments.algorithm == "hmm":
                 if arguments.hmmtrainwith == "malware":
-                    allJSONFiles = glob.glob("%s/*.json" % arguments.malwaredir)
-                    allJSONFiles += glob.glob("%s/*.json" % arguments.goodwaredir)
+                    allJSONFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension))
+                    allJSONFiles += glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
                 else:
-                    allJSONFiles = glob.glob("%s/*.json" % arguments.goodwaredir)
-                    allJSONFiles += glob.glob("%s/*.json" % arguments.malwaredir)
+                    allJSONFiles = glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
+                    allJSONFiles += glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension))
 
                 if len(allJSONFiles) < 1:
                     prettyPrint("Unable to retrieve any JSON files from \"%s\" or \"%s\". Exiting" % (arguments.malwaredir, arguments.goodwaredir), "error")
@@ -254,6 +256,7 @@ def main():
                         y.append(1)
                     else:
                         y.append(0)
+                print allFeatureFiles[0] 
 
                 prettyPrint("Successfully loaded %s feature files" % len(X))
                 predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold))
@@ -285,28 +288,20 @@ def main():
             prettyPrint("Precision: %s" % str(metrics["precision"]), "output")
             prettyPrint("F1 Score: %s" %  str(metrics["f1score"]), "output")
 
-            # Save correctly-classified instances for future use
+            # Save incorrectly-classified instances for re-analysis
+            reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
             for index in range(len(y)):
-                if predicted[index] == y[index]:
-                    # Store the instance's representation i.e. trace/feature vector
+                if predicted[index] != y[index]:
                     if arguments.algorithm == "hmm":
-                       trace = allTraces[index]
-                       traceFile = open("%s/%s.%s" % (arguments.malwaredir, trace[2], arguments.fileextension), "w") if trace[1] == 1 else open("%s/%s.%s" % (arguments.goodwaredir, trace[2], arguments.fileextension), "w")
-                       traceFile.write(trace[0])
-                       traceFile.close()
+                        if allJSONFiles[index].find("malware") != -1:
+                            reanalyzeMalware.append(allJSONFiles[index])
+                        else:
+                            reanalyzeGoodware.append(allJSONFiles[index])
                     else:
-                        numFile = open(allFeatureFiles[index], "w")
-                        numFile.write(X[index])
-                        numFile.close()
-                else:
-                    # Remove any previously-stored representation 
-                    if arguments.algorithm == "hmm":
-                        traceFile = "%s/%s.%s" % (arguments.malwaredir, allTraces[index][2], arguments.fileextension) if allTraces[index][1] == 1 else "%s/%s.%s" % (arguments.goodwaredir, allTraces[index][2], arguments.fileextension)
-                        if os.path.exists(traceFile):
-                            os.unlink(traceFile)
-                    else:
-                        if os.path.exists(allFeatureFiles[index]):
-                            os.unlink(allFeatureFiles[index])
+                        if allFeatureFiles[index].find("malware") != -1:
+                            reanalyzeMalware.append(allFeatureFiles[index])
+                        else:
+                            reanalyzeGoodware.append(allFeatureFiles[index])
 
             # Swapping metrics
             previousMetrics = currentMetrics
