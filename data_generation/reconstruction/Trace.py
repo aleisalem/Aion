@@ -5,7 +5,7 @@ from Aion.utils.graphics import *
 
 import glob, os, json
 
-def loadJSONTraces(jsonFiles, outType="csv"):
+def loadJSONTraces(jsonFiles, filesType="malware"):
     """Loads and parses JSON files in a list and returns a list of comma-separated traces"""
     try:
         allTraces = []
@@ -19,12 +19,10 @@ def loadJSONTraces(jsonFiles, outType="csv"):
                 jsonTrace = json.loads(open(jsonFile).read())
                 # Convert the JSON trace to a comma-separated string
                 currentTrace = introspyJSONToTrace(jsonTrace)
-                # Converts trace to list or leave as csv
-                currentTrace = currentTrace.split("|") if outType == "list" else currentTrace
                 # Append trace to list
-                if jsonFile.lower().find("malware") != -1:
+                if filesTypes == "malware":
                     allTraces.append((currentTrace, 1, currentAppName))
-                elif jsonFile.lower().find("goodware") != -1:
+                elif fileTypes == "goodware":
                     allTraces.append((currentTrace, 0, currentAppName))
                 else:
                     allTraces.append((currentTrace, -1, currentAppName))
