@@ -49,6 +49,7 @@ def extractAndroguardFeatures(apkPath):
 
     except Exception as e:
         prettyPrintError(e)
+        return []
     
     return features     
 
@@ -91,6 +92,7 @@ def extractIntrospyFeatures(apkJSONPath):
 
     except Exception as e:
         prettyPrintError(e)
+        return []
 
     return features
 

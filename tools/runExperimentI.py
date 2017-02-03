@@ -76,6 +76,16 @@ def main():
 
                 genyProcess = None # A (dummy) handle to the genymotion player process
                 for path in allAPKs:
+                    # 0. Check whether the app has already been analyzed
+                    if arguments.algorithm == "svm" or arguments.algorithm == "tree":
+                        if os.path.exists(path.replace("apk", arguments.fileextension)):
+                            prettyPrint("App has already been analyzed. Skipping", "warning")
+                            continue
+                    else:
+                        if os.path.exists(path.replace(".apk", ".json")):
+                            prettyPrint("App has already been analyzed. Skipping", "warning")
+                            continue
+                        
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
                     currentAPK = Garfield(path, APKType)
@@ -172,7 +182,7 @@ def main():
                     if currentAPK.APKType == "malware": 
                         traceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
                     else:
-                        traceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
+                        traceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
                     # 7.b. Write content
                     traceFile.write(trace)
                     traceFile.close()
@@ -186,7 +196,12 @@ def main():
                     html.write_report_to_directory(targetDir)
                 
                     # 7.d. Extract and save numerical features for SVM's and Trees
-                    features = extractAndroguardFeatures(path) + extractIntrospyFeatures(traceFile.name)
+                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(traceFile.name)
+                    if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
+                        prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
+                        continue
+                    # Otherwise, store the features
+                    features = staticFeatures + dynamicFeatures
                     if currentAPK.APKType == "malware":
                         featuresFile = open("%s/%s.%s" % (arguments.malwaredir, apkFileName, arguments.fileextension), "w")
                     else:
