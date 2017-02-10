@@ -46,14 +46,15 @@ def main():
              prettyPrint("Unable to locate the Android SDK. Exiting", "error")
              return False
  
-        iteration = 1 # Initial values
+        iteration = 0 # Initial values
         currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
         previousMetrics = {"accuracy": -1.0, "recall": -1.0, "specificity": -1.0, "precision": -1.0, "f1score": -1.0}
         reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
 
         while currentMetrics["f1score"] > previousMetrics["f1score"]:
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
-            if arguments.analyzeapks == "yes" or iteration >= 2:
+            if arguments.analyzeapks == "yes":
+                iteration += 1
                 # Define paths to Android SDK tools
                 monkeyRunnerPath = arguments.sdkdir + "/tools/monkeyrunner"
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
@@ -324,12 +325,18 @@ def main():
                             reanalyzeMalware.append(allJSONFiles[index])
                         else:
                             reanalyzeGoodware.append(allJSONFiles[index])
+                        # Also delete the file
+                        os.unlink(allJSONFiles[index])
+  
                     else:
                         # malware instances are in hashes whereas this appends their package names to the list. Update either!!
                         if allFeatureFiles[index].find("malware") != -1:
                             reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
                         else:
                             reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
+                        # Also delete the files (.json and .[fileextension])
+                        os.unlink(allFeatureFiles[index])
+                        os.unlink(allFeatureFiles[index].replace(".num", ".json")) 
 
             print reanalyzeGoodware
             print reanalyzeMalware
@@ -339,8 +346,6 @@ def main():
             for m in metrics:
                 metrics[m] = metrics[m]/float(arguments.kfold)
             currentMetrics = metrics
-            # Increment the iteration for further analysis
-            iteration += 1
             
         # Final Results
         prettyPrint("Results after %s iterations" % iteration, "output")
