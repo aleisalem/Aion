@@ -3,6 +3,7 @@
 from Aion.utils.data import *
 from Aion.utils.graphics import *
 from Aion.utils.misc import *
+from Aion.data_inference.extraction.StringKernelSVM import *
 
 import sklearn, numpy
 from sklearn import svm, tree
@@ -11,6 +12,35 @@ from sklearn.metrics import *
 
 import os
 
+def predictKFoldSVMStringKernel(X, y, C=1, kfold=10, subseqLength=3):
+    """Classifies the data using Support vector machines with the SSK kernel and k-fold CV
+    :param X: The list of text documents containing traces
+    :type X: list
+    :param y: The labels of documents in 'X'
+    :type y: list
+    :param C: The 'C' paramter for SVM
+    :type C: int (default: 1)
+    :param kfold: The number of folds
+    :type kfold: int (default: 10)
+    :param subseqLength: Length of subsequence
+    :type subseqLength: int (default: 3)
+    :return: 
+    """
+    try:
+        predicted = []
+        # Retrieve Gram Matrix from string kernel
+        if verboseON():
+            prettyPrint("Generating Gram Matrix from documents", "debug")
+        X_gram = string_kernel(X, X)
+        y = numpy.array(y)
+        # Define classifier
+        clf = svm.SVC(kernel="precomputed")
+        predicted = cross_val_predict(clf, X_gram, y, cv=kfold).tolist()
+    except Exception as e:
+        prettyPrintError(e)
+        return []
+
+    return predicted
 
 def predictKFoldSVM(X, y, kernel="linear", C=1, kfold=10):
     """Classifies the data using Support vector machines and k-fold CV"""

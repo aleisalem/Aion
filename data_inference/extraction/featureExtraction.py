@@ -66,6 +66,12 @@ def extractIntrospyFeatures(apkJSONPath):
             fsCalls, prefCalls, uriCalls = 0.0, 0.0, 0.0 # Storage group
             ipcCalls = 0.0 # Ipc group
             webviewCalls = 0.0  # Misc group
+            accountManagerCalls, activityCalls, downloadManagerCalls = 0.0, 0.0, 0.0
+            contentResolverCalls, contextWrapperCalls, packageInstallerCalls = 0.0, 0.0, 0.0
+            sqliteCalls, cameraCalls, displayManagerCalls, locationCalls = 0.0, 0.0, 0.0, 0.0
+            audioRecordCalls, mediaRecorderCalls, networkCalls, wifiManagerCalls = 0.0, 0.0, 0.0, 0.0
+            powerManagerCalls, smsManagerCalls, toastCalls, classCalls = 0.0, 0.0, 0.0, 0.0
+            httpCookieCalls, urlCalls = 0.0, 0.0
             for call in apkJSON["calls"]:
                 group, subgroup = call["group"], call["subgroup"]
                 if group == "Crypto":
@@ -80,15 +86,97 @@ def extractIntrospyFeatures(apkJSONPath):
                     ipcCalls = ipcCalls + 1 if call["group"] == "Ipc" else ipcCalls
                 elif group == "Misc":
                     webviewCalls = webviewCalls + 1 if call["group"] == "Webview" else webviewCalls
+                elif group.lower().find("custom") != -1:
+                    # Handle custom hooks
+                    # android.accounts.AccountManager
+                    if call["clazz"] == "android.accounts.AccountManager":
+                        accountManagerCalls += 1
+                    # android.app.Activity
+                    elif call["clazz"] == "android.app.Activity":
+                        activityCalls += 1
+                    # android.app.DownloadManager
+                    elif call["clazz"] == "android.app.DownloadManager":
+                        downloadManagerCalls += 1 
+                    # android.content.ContentResolver
+                    elif call["clazz"] == "android.content.ContentResolver":
+                        contentResolverCalls += 1
+                    # android.content.ContextWrapper
+                    elif call["clazz"] == "android.content.ContextWrapper":
+                        contextWrapperCalls += 1
+                    # android.content.pm.PackageInstaller
+                    elif call["clazz"] == "android.content.pm.PackageInstaller":
+                        packageInstallerCalls += 1
+                    # android.database.sqlite.SQLiteDatabase
+                    elif call["clazz"] == "android.database.sqlite.SQLiteDatabase":
+                        sqliteCalls += 1
+                    # android.hardware.Camera
+                    elif call["clazz"] == "android.hardware.Camera":
+                        cameraCalls += 1
+                    # android.hardware.display.DisplayManager
+                    elif call["clazz"] ==  "android.hardware.display.DisplayManager":
+                        displayManagerCalls += 1
+                    # android.location.Location
+                    elif call["clazz"] == "android.location.Location":
+                        locationCalls += 1
+                    # android.media.AudioRecord
+                    elif call["clazz"] == "android.media.AudioRecord":
+                        audioRecordCalls += 1
+                    # android.media.MediaRecorder
+                    elif call["clazz"] == "android.media.MediaRecorder":
+                        mediaRecorderCalls += 1
+                    # android.net.Network
+                    elif call["clazz"] == "android.net.Network":
+                        networkCalls += 1
+                    # android.net.wifi.WifiManager
+                    elif call["clazz"] == "android.net.wifi.WifiManager":
+                        wifiManagerCalls += 1
+                    # android.os.PowerManager
+                    elif call["clazz"] == "android.os.PowerManager":
+                        powerManagerCalls += 1
+                    # android.telephony.SmsManager
+                    elif call["clazz"] == "android.telephony.SmsManager":
+                        smsManagerCalls += 1
+                    # android.widget.Toast
+                    elif call["clazz"] == "android.widget.Toast":
+                        toastCalls += 1
+                    # java.lang.class
+                    elif call["clazz"] == "java.lang.class":
+                        classCalls += 1
+                    # java.net.HttpCookie
+                    elif call["clazz"] == "java.net.HttpCookie":
+                        httpCookieCalls += 1
+                    # java.net.URL
+                    elif call["clazz"] == "java.net.URL":
+                        urlCalls += 1
 
-        features.append(cryptoCalls)
-        features.append(sslCalls)
-        features.append(hashCalls)
-        features.append(fsCalls)
-        features.append(prefCalls)
-        features.append(uriCalls)
-        features.append(ipcCalls)
-        features.append(webviewCalls)
+            features.append(cryptoCalls)
+            features.append(sslCalls)
+            features.append(hashCalls)
+            features.append(fsCalls)
+            features.append(prefCalls)
+            features.append(uriCalls)
+            features.append(ipcCalls)
+            features.append(webviewCalls)
+            features.append(accountManagerCalls)
+            features.append(activityCalls)
+            features.append(downloadManagerCalls)
+            features.append(contentResolverCalls)
+            features.append(contextWrapperCalls)
+            features.append(packageInstallerCalls)
+            features.append(sqliteCalls)
+            features.append(cameraCalls)
+            features.append(displayManagerCalls)
+            features.append(locationCalls)
+            features.append(audioRecordCalls)
+            features.append(mediaRecorderCalls)
+            features.append(networkCalls)
+            features.append(wifiManagerCalls)
+            features.append(powerManagerCalls)
+            features.append(smsManagerCalls)
+            features.append(toastCalls)
+            features.append(classCalls)
+            features.append(httpCookieCalls)
+            features.append(urlCalls)
 
     except Exception as e:
         prettyPrintError(e)

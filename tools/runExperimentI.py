@@ -28,6 +28,8 @@ def defineArguments():
     parser.add_argument("-a", "--algorithm", help="The machine learning algorithm to use for classification", required=False, default="hmm", choices=["hmm", "associative", "svm"])
     parser.add_argument("-k", "--kfold", help="Whether to use k-fold cross validation and the value of \"K\"", required=False, default=2)
     parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="txt")
+    parser.add_argument("-u", "--svmusessk", help="Whether to use the SSK kernel with SVM", required=False, default="no", choices=["yes", "no"])
+    parser.add_argument("-n", "--svmsubsequence", help="The length of the subsequence to consider upon using SVM's with the SSK", required=False, default=3)
     parser.add_argument("-w", "--hmmtrainwith", help="Whether to train the HMM with malicious or benign instances", required=False, default="malware", choices=["malware", "goodware"])
     parser.add_argument("-l", "--hmmtracelength", help="The maximum trace length to consider during testing", required=False, default=50)
     parser.add_argument("-e", "--hmmthreshold", help="The likelihood threshold to apply during testing", required=False, default=-500)
@@ -174,26 +176,26 @@ def main():
                         prettyPrint("Database image is malformed. Skipping", "warning")
                         continue
 
-                    trace = db.get_traced_calls_as_JSON()
+                    jsonTrace = db.get_traced_calls_as_JSON()
 
                     # 7. Write trace to malware/goodware dir
                     # 7.a. Get a handle
                     apkFileName = path[path.rfind("/")+1:].replace(".apk","")
                     if currentAPK.APKType == "malware": 
-                        traceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
+                        jsonTraceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
                     else:
-                        traceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
+                        jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
                     # 7.b. Write content
-                    traceFile.write(trace)
-                    traceFile.close()
+                    jsonTraceFile.write(jsonTrace)
+                    jsonTraceFile.close()
 
                     # 7.c. Introspy's HTML report
-                    html = introspy.HTMLReportGenerator(db, "foobar") # Second arguments needs to be anythin but ""/None
-                    targetDir = "%s/%s" % (arguments.malwaredir, apkFileName) if currentAPK.APKType == "malware" else "%s/%s" % (arguments.goodwaredir, apkFileName)
-                    if os.path.exists(targetDir):
-                        shutil.rmtree(targetDir)
+                    #html = introspy.HTMLReportGenerator(db, "foobar") # Second arguments needs to be anythin but ""/None
+                    #targetDir = "%s/%s" % (arguments.malwaredir, apkFileName) if currentAPK.APKType == "malware" else "%s/%s" % (arguments.goodwaredir, apkFileName)
+                    #if os.path.exists(targetDir):
+                    #    shutil.rmtree(targetDir)
                     # Save new report
-                    html.write_report_to_directory(targetDir)
+                    #html.write_report_to_directory(targetDir)
                 
                     # 7.d. Extract and save numerical features for SVM's and Trees
                     staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(traceFile.name)
@@ -201,7 +203,7 @@ def main():
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
                     # Otherwise, store the features
-                    features = staticFeatures + dynamicFeatures
+                    features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
                     if currentAPK.APKType == "malware":
                         featuresFile = open("%s/%s.%s" % (arguments.malwaredir, apkFileName, arguments.fileextension), "w")
                     else:
@@ -237,7 +239,8 @@ def main():
                     prettyPrint("Successfully retrieved %s JSON files" % len(allJSONFiles))
             else:
                 # Load numerical features
-                allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
+                allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.featuresext))
+                allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
                 
             #######################
             # Hidden Markov Model #
@@ -259,18 +262,30 @@ def main():
             ###########################
             elif arguments.algorithm == "svm":
                 prettyPrint("Classifying using Support Vector Machines")
-
                 X, y = [], []
-                for f in allFeatureFiles:
-                    X.append(Numerical.loadNumericalFeatures(f))
-                    if f.find("malware") != -1:
-                        y.append(1)
-                    else:
-                        y.append(0)
-                print allFeatureFiles[0] 
+                if arguments.svmusessk == "yes":
+                    prettyPrint("Using the String Subsequence Kernel (SSK)")
+                    for f in allTraceFiles:
+                        X.append(introspyJSONToTrace(f))
+                        # TODO: Assumes the word "malware" is in the file path/name. Fix that.
+                        if f.find("malware") != -1:
+                            y.append(1)
+                        else:
+                            y.append(0)
+                     
+                    predicted = ScikitLearners.predictedKFoldSVMStringKernel(X, y, kfold=int(arguments.kfold), subseqLength=int(arguments.svmsubsequence))
 
-                prettyPrint("Successfully loaded %s feature files" % len(X))
-                predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold))
+                else:
+                    for f in allFeatureFiles:
+                         X.append(Numerical.loadNumericalFeatures(f))
+                         # TODO: Assumes the word "malware" is in the file path/name. Fix that.
+                         if f.find("malware") != -1:
+                             y.append(1)
+                         else:
+                             y.append(0)
+
+                    predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold))
+
                 metrics = ScikitLearners.calculateMetrics(y, predicted)
 
             ##################
@@ -282,6 +297,7 @@ def main():
                 X, y = [], []
                 for f in allFeatureFiles:
                     X.append(Numerical.loadNumericalFeatures(f))
+                    # TODO: Assumes the word "malware" is in the file path/name. Fix that.
                     if f.find("malware") != -1:
                         y.append(1)
                     else:
