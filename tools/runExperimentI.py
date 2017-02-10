@@ -47,26 +47,28 @@ def main():
              return False
  
         iteration = 1 # Initial values
+        reanalysis = False
         currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
         previousMetrics = {"accuracy": -1.0, "recall": -1.0, "specificity": -1.0, "precision": -1.0, "f1score": -1.0}
         reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
 
         while currentMetrics["f1score"] > previousMetrics["f1score"]:
+            reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
+            iteration += 1
             if arguments.analyzeapks == "yes":
-                iteration += 1
                 # Define paths to Android SDK tools
                 monkeyRunnerPath = arguments.sdkdir + "/tools/monkeyrunner"
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
 
                 # Retrieve malware APK's
-                malAPKs = reanalyzeMalware if iteration > 1 else glob.glob("%s/*.apk" % arguments.malwaredir)
+                malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir)
                 if len(malAPKs) < 1:
                     prettyPrint("Could not find any malicious APK's" , "warning")
                 else:
                     prettyPrint("Successfully retrieved %s malicious instances" % len(malAPKs))
                 # Retrieve goodware APK's
-                goodAPKs = reanalyzeGoodware if iteration > 1 else glob.glob("%s/*.apk" % arguments.goodwaredir)
+                goodAPKs = reanalyzeGoodware if reanalysis else glob.glob("%s/*.apk" % arguments.goodwaredir)
                 if len(goodAPKs) < 1:
                     prettyPrint("Could not find any benign APK's", "warning")
                 else:
