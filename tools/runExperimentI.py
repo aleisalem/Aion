@@ -198,7 +198,7 @@ def main():
                     #html.write_report_to_directory(targetDir)
                 
                     # 7.d. Extract and save numerical features for SVM's and Trees
-                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(traceFile.name)
+                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(jsonTraceFile.name)
                     if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
@@ -239,7 +239,7 @@ def main():
                     prettyPrint("Successfully retrieved %s JSON files" % len(allJSONFiles))
             else:
                 # Load numerical features
-                allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.featuresext))
+                allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
                 allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
                 
             #######################
