@@ -46,7 +46,7 @@ def main():
              prettyPrint("Unable to locate the Android SDK. Exiting", "error")
              return False
  
-        iteration = 0 # Initial values
+        iteration = 1 # Initial values
         currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
         previousMetrics = {"accuracy": -1.0, "recall": -1.0, "specificity": -1.0, "precision": -1.0, "f1score": -1.0}
         reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
@@ -343,8 +343,6 @@ def main():
 
             # Swapping metrics
             previousMetrics = currentMetrics
-            for m in metrics:
-                metrics[m] = metrics[m]/float(arguments.kfold)
             currentMetrics = metrics
             
         # Final Results
