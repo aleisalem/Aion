@@ -19,10 +19,8 @@ import os, sys, glob, shutil, argparse, subprocess, sqlite3
 def defineArguments():
     parser = argparse.ArgumentParser(prog="runExperimentI.py", description="A tool to implement the stimulation-detection feedback loop using Garfield as stimulation engine.")
     parser.add_argument("-s", "--sdkdir", help="The path to Android SDK", required=True)
-    parser.add_argument("-x", "--malwaredir", help="The directory containing the malicious APK's to analyze and use as training/validation dataset", required=True)
-    parser.add_argument("-g", "--goodwaredir", help="The directory containing the benign APK's to analyze and use as training/validation dataset", required=True)
-    parser.add_argument("-m", "--malwaredirtest", help="The directory containing the malicious APK's to analyze and use as test dataset", required=True)
-    parser.add_argument("-b", "--goodwaredirtest", help="The directory containing the benign APK's to analyze and use as test dataset .", required=True)  
+    parser.add_argument("-x", "--malwaredir", help="The directory containing the malicious APK's to analyze", required=False, default=".")
+    parser.add_argument("-g", "--goodwaredir", help="The directory containing the benign APK's to analyze", required=False, default=".")
     parser.add_argument("-f", "--analyzeapks", help="Whether to perform analysis on the retrieved APK's", required=False, default="no", choices=["yes", "no"])
     parser.add_argument("-t", "--analysistime", help="How long to run monkeyrunner (in seconds)", required=False, default=60)
     parser.add_argument("-v", "--vmname", help="The name of the Genymotion machine to use for analysis", required=False, default="")
@@ -64,13 +62,13 @@ def main():
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
 
                 # Retrieve malware APK's
-                malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir) + glob.glob("%s/*.apk" % arguments.malwaredirtest)
+                malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir)
                 if len(malAPKs) < 1:
                     prettyPrint("Could not find any malicious APK's" , "warning")
                 else:
                     prettyPrint("Successfully retrieved %s malicious instances" % len(malAPKs))
                 # Retrieve goodware APK's
-                goodAPKs = reanalyzeGoodware if reanalysis else glob.glob("%s/*.apk" % arguments.goodwaredir) + glob.glob("%s/*.apk" % arguments.goodwaredirtest)
+                goodAPKs = reanalyzeGoodware if reanalysis else glob.glob("%s/*.apk" % arguments.goodwaredir)
                 if len(goodAPKs) < 1:
                     prettyPrint("Could not find any benign APK's", "warning")
                 else:
@@ -229,37 +227,47 @@ def main():
             ####################################################################
             # Load the JSON  and feature files as traces before classification #
             ####################################################################
-            # Load numerical features
-            allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
-            allFeatureFilesTest = glob.glob("%s/*.%s" % (arguments.malwaredirtest, arguments.fileextension)) + glob.glbo("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
-            allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
-            allTraceFilesTest = glob.glob("%s/*.json" % arguments.malwaredirtest) + glob.glob("%s/*.json" % arguments.goodwaredirtest)
+            if arguments.algorithm == "hmm":
+                if arguments.hmmtrainwith == "malware":
+                    allJSONFiles = Trace.loadJSONTraces(glob.glob("%s/*.json" % (arguments.malwaredir, arguments.fileextension)), "malware")
+                    allJSONFiles += Trace.loadJSONTraces(glob.glob("%s/*.json" % (arguments.goodwaredir, arguments.fileextension)), "goodware")
+                else:
+                    allJSONFiles = Trace.loadJSONTraces(glob.glob("%s/*.json" % (arguments.goodwaredir, arguments.fileextension)), "malware")
+                    allJSONFiles += Trace.loadJSONTraces(glob.glob("%s/*.json" % (arguments.malwaredir, arguments.fileextension)), "goodware")
+
+                if len(allJSONFiles) < 1:
+                    prettyPrint("Unable to retrieve any JSON files from \"%s\" or \"%s\". Exiting" % (arguments.malwaredir, arguments.goodwaredir), "error")
+                    return False
+                else:
+                    prettyPrint("Successfully retrieved %s JSON files" % len(allJSONFiles))
+            else:
+                # Load numerical features
+                allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
+                allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
                 
             #######################
             # Hidden Markov Model #
             #######################
-            #if arguments.algorithm == "hmm":
-            #    prettyPrint("Classifying using HMM and training with \"%s\" instances" % arguments.hmmtrainwith)
+            if arguments.algorithm == "hmm":
+                prettyPrint("Classifying using HMM and training with \"%s\" instances" % arguments.hmmtrainwith)
 
                 # Build X and y from "allTraces"
-            #    X = [t[0] for t in allTraces]
-            #    y = [t[1] for t in allTraces]
+                X = [t[0] for t in allTraces]
+                y = [t[1] for t in allTraces]
 
                 # Perform cross validation predicted
-            #    predicted = HMM.cross_val_predict(X, y, arguments.hmmtracelength, arguments.hmmthreshold, int(arguments.kfold), arguments.hmmtrainwith)
+                predicted = HMM.cross_val_predict(X, y, arguments.hmmtracelength, arguments.hmmthreshold, int(arguments.kfold), arguments.hmmtrainwith)
                 # Calculate the performance metrics
-            #    metrics = ScikitLearners.calculateMetrics(y, predicted)
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
             
             ###########################
             # Support Vector Machines #
             ###########################
-            if arguments.algorithm == "svm":
+            elif arguments.algorithm == "svm":
                 prettyPrint("Classifying using Support Vector Machines")
                 X, y = [], []
-                Xtest, ytest = [], []
                 if arguments.svmusessk == "yes":
                     prettyPrint("Using the String Subsequence Kernel (SSK)")
-                    # Loading training feature vectors
                     for f in allTraceFiles:
                         X.append(introspyJSONToTrace(f))
                         # TODO: Assumes the word "malware" is in the file path/name. Fix that.
@@ -267,20 +275,10 @@ def main():
                             y.append(1)
                         else:
                             y.append(0)
-                    # Loading test feature vectors
-                    for f in allTraceFilesTest:
-                        Xtest.append(introspyJSONToTrace(f))
-                        # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                        if f.find("malware") != -1:
-                            ytest.append(1)
-                        else:
-                            ytest.append(0)
-                        
                      
-                    predicted, predicted_test = ScikitLearners.predictedAndTestKFoldSVMSSK(X, y, Xtest, ytest, kfold=int(arguments.kfold), subseqLength=int(arguments.svmsubsequence))
+                    predicted = ScikitLearners.predictedKFoldSVMStringKernel(X, y, kfold=int(arguments.kfold), subseqLength=int(arguments.svmsubsequence), saveModel=True)
 
                 else:
-                    # Loading training feature vectors
                     for f in allFeatureFiles:
                          X.append(Numerical.loadNumericalFeatures(f))
                          # TODO: Assumes the word "malware" is in the file path/name. Fix that.
@@ -289,18 +287,9 @@ def main():
                          else:
                              y.append(0)
 
-                    # Loading test feature vectors
-                    for f in allFeatureFilesTest:
-                        Xtest.append(Numerical.loadNumericalFeatures(f))
-                        # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                        if f.find("malware") != -1:
-                            ytest.append(1)
-                        else:
-                            ytest.append(0)                        
+                    predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold), saveModel=True)
 
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldSVM(X, y, Xtest, ytest, kfold=int(arguments.kfold))
-
-                metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
 
             ##################
             # Decision Trees #
@@ -309,8 +298,6 @@ def main():
                 prettyPrint("Classifying using Decision Trees")
 
                 X, y = [], []
-                Xtest, ytest = [], []
-                # Loading training feature vectors
                 for f in allFeatureFiles:
                     X.append(Numerical.loadNumericalFeatures(f))
                     # TODO: Assumes the word "malware" is in the file path/name. Fix that.
@@ -318,36 +305,20 @@ def main():
                         y.append(1)
                     else:
                         y.append(0)
-                # Loading test feature vectors
-                for f in allFeatureFilesTest:
-                    Xtest.append(Numerical.loadNumericalFeatures(f))
-                    # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                    if f.find("malware") != -1:
-                        ytest.append(1)
-                    else:
-                        ytest.append(0)
 
-                predicted, predicted_test = ScikitLearners.predictAndTestKFoldTree(X, y, Xtest, ytest, kfold=int(arguments.kfold))
-                metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
-                
+                prettyPrint("Successfully loaded %s feature files" % len(X))
+                predicted = ScikitLearners.predictKFoldTree(X, y, kfold=int(arguments.kfold), saveModel=True)
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
 
-            # The average metrics for training dataset
+            # The average metrics
             prettyPrint("Metrics using %s-fold cross validation and %s" % (arguments.kfold, arguments.algorithm), "output")
             prettyPrint("Accuracy: %s" % str(metrics["accuracy"]), "output")
             prettyPrint("Recall: %s" % str(metrics["recall"]), "output")
             prettyPrint("Specificity: %s" % str(metrics["specificity"]), "output")
             prettyPrint("Precision: %s" % str(metrics["precision"]), "output")
             prettyPrint("F1 Score: %s" %  str(metrics["f1score"]), "output")
-            # The average metrics for test dataset
-            prettyPrint("Metrics for test dataaset using %s" % (arguments.kfold, arguments.algorithm), "output")
-            prettyPrint("Accuracy: %s" % str(metrics_test["accuracy"]), "output")
-            prettyPrint("Recall: %s" % str(metrics_test["recall"]), "output")
-            prettyPrint("Specificity: %s" % str(metrics_test["specificity"]), "output")
-            prettyPrint("Precision: %s" % str(metrics_test["precision"]), "output")
-            prettyPrint("F1 Score: %s" %  str(metrics_test["f1score"]), "output")
-            
 
-            # Save incorrectly-classified training instances for re-analysis
+            # Save incorrectly-classified instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
             for index in range(len(y)):
                 if predicted[index] != y[index]:
@@ -377,7 +348,7 @@ def main():
             currentMetrics = metrics
             
         # Final Results
-        prettyPrint("Training results after %s iterations" % iteration, "output")
+        prettyPrint("Results after %s iterations" % iteration, "output")
         prettyPrint("Accuracy: %s" % currentMetrics["accuracy"], "output")
         prettyPrint("Recall: %s" % currentMetrics["recall"], "output")
         prettyPrint("Specificity: %s" % currentMetrics["specificity"], "output")
