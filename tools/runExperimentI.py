@@ -60,7 +60,7 @@ def main():
             iteration += 1
             if arguments.analyzeapks == "yes":
                 # Define paths to Android SDK tools
-                monkeyRunnerPath = arguments.sdkdir + "/tools/monkeyrunner"
+                monkeyRunnerPath = arguments.sdkdir + "/tools/bin/monkeyrunner"
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
 
                 # Retrieve malware APK's
