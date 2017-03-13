@@ -187,9 +187,15 @@ def main():
                     # 7.a. Get a handle
                     apkFileName = path[path.rfind("/")+1:].replace(".apk","")
                     if currentAPK.APKType == "malware": 
-                        jsonTraceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
+                         if path.find("training") != -1:
+                             jsonTraceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
+                         else:
+                             jsonTraceFile = open("%s/%s.json" % (arguments.malwaredirtest, apkFileName), "w")
                     else:
-                        jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
+                        if path.find("training") != -1:
+                            jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
+                        else:
+                            jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredirtest, apkFileName), "w")
                     # 7.b. Write content
                     jsonTraceFile.write(jsonTrace)
                     jsonTraceFile.close()
@@ -210,9 +216,16 @@ def main():
                     # Otherwise, store the features
                     features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
                     if currentAPK.APKType == "malware":
-                        featuresFile = open("%s/%s.%s" % (arguments.malwaredir, apkFileName, arguments.fileextension), "w")
+                        if path.find("training") != -1:
+                            featuresFile = open("%s/%s.%s" % (arguments.malwaredir, apkFileName, arguments.fileextension), "w")
+                        else:
+                            featuresFile = open("%s/%s.%s" % (arguments.malwaredirtest, apkFileName, arguments.fileextension), "w")
                     else:
-                        featuresFile = open("%s/%s.%s" % (arguments.goodwaredir, apkFileName, arguments.fileextension), "w")
+                        if path.find("training") != -1:
+                            featuresFile = open("%s/%s.%s" % (arguments.goodwaredir, apkFileName, arguments.fileextension), "w")
+                        else:
+                           featuresFile = open("%s/%s.%s" % (arguments.goodwaredirtest, apkFileName, arguments.fileextension), "w")
+
 
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
@@ -231,7 +244,7 @@ def main():
             ####################################################################
             # Load numerical features
             allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
-            allFeatureFilesTest = glob.glob("%s/*.%s" % (arguments.malwaredirtest, arguments.fileextension)) + glob.glbo("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
+            allFeatureFilesTest = glob.glob("%s/*.%s" % (arguments.malwaredirtest, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
             allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
             allTraceFilesTest = glob.glob("%s/*.json" % arguments.malwaredirtest) + glob.glob("%s/*.json" % arguments.goodwaredirtest)
                 
@@ -330,7 +343,9 @@ def main():
                 predicted, predicted_test = ScikitLearners.predictAndTestKFoldTree(X, y, Xtest, ytest, kfold=int(arguments.kfold))
                 metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
                 
-
+            if len(metrics) < 5 or len(metrics_test) < 5:
+                prettyPrint("FATAL ERROR: Either or both metrics dicts are incomplete", "error")
+                return False
             # The average metrics for training dataset
             prettyPrint("Metrics using %s-fold cross validation and %s" % (arguments.kfold, arguments.algorithm), "output")
             prettyPrint("Accuracy: %s" % str(metrics["accuracy"]), "output")

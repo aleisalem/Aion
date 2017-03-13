@@ -170,7 +170,7 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, kfold=10):
     :return: Two lists of the validation and test accuracies across the 10 folds
     """
     try:
-        predicted, predicted_test = [], []
+        predicted, predicted_test = [-1] * len(y), []
         # Define classifier and cross validation iterator
         clf = svm.SVC(kernel=kernel, C=C)
         kf = KFold(n_splits=10)
@@ -191,12 +191,13 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, kfold=10):
             clf.fit(Xtrain, ytrain)
             # Validate and test model
             temp = clf.predict(Xval)
-            predicted = [predicted[i]+temp[i] for i in range(len(temp))] if len(predicted) == len(temp) else temp
+            for i in validation_indices:
+                predicted[i] = temp[i]
             temp = clf.predict(Xtest)
             predicted_test = [predicted_test[i]+temp[i] for i in range(len(temp))] if len(predicted_test) == len(temp) else temp
         # Now average the predicted lists
-        for i in range(len(predicted)):
-            predicted[i] = 1 if predicted[i] >= int(kfold/2) else 0
+ #       for i in range(len(predicted)):
+#            predicted[i] = 1 if predicted[i] >= int(kfold/2) else 0
         for i in range(len(predicted_test)):
             predicted_test[i] = 1 if predicted_test[i] >= int(kfold/2) else 0
 
