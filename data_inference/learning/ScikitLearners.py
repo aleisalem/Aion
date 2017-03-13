@@ -94,12 +94,15 @@ def predictAndTestKFoldSVMSSK(X, y, Xtest, ytest, kfold=10, subseqLength=3):
         for training_indices, validation_indices in kf.split(X):
             # Populate training and validation matrices
             Xtrain, ytrain, Xval, yval = [], [], [], []
+            index_mapper, index_counter = {}, 0
             for ti in training_indices:
                 Xtrain.append(X[ti])
                 ytrain.append(y[ti])
             for vi in validation_indices:
                 Xval.append(X[vi])
                 yval.append(y[vi])
+                index_mapper[index_counter] = vi
+                index_counter += 1
             # Prepare data
             Xtrain_gram = string_kernel(Xtrain, Xtrain)
             Xval_gram = string_kernel(Xval, Xval)
@@ -108,12 +111,11 @@ def predictAndTestKFoldSVMSSK(X, y, Xtest, ytest, kfold=10, subseqLength=3):
             clf.fit(Xtrain, ytrain)
             # Validate and test model
             temp = clf.predict(Xval_gram)
-            predicted = [predicted[i]+temp[i] for i in range(len(temp))] if len(predicted) == len(temp) else temp
+            for i in range(len(temp)):
+                predicted[index_mapper[i]] = temp[i]
             temp = clf.predict(Xtest_gram)
             predicted_test = [predicted_test[i]+temp[i] for i in range(len(temp))] if len(predicted_test) == len(temp) else temp
         # Now average the predicted lists
-        for i in range(len(predicted)):
-            predicted[i] = 1 if predicted[i] >= int(kfold/2) else 0
         for i in range(len(predicted_test)):
             predicted_test[i] = 1 if predicted_test[i] >= int(kfold/2) else 0
 
@@ -179,25 +181,26 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, kfold=10):
         for training_indices, validation_indices in kf.split(X):
             # Populate training and validation matrices
             Xtrain, ytrain, Xval, yval = [], [], [], []
+            index_mapper, index_counter = {}, 0
             for ti in training_indices:
                 Xtrain.append(X[ti])
                 ytrain.append(y[ti])
             for vi in validation_indices:
                 Xval.append(X[vi])
                 yval.append(y[vi])
+                index_mapper[index_counter] = vi
+                index_counter += 1                
             # Prepare data
             Xtrain, ytrain, Xval, yval = numpy.array(Xtrain), numpy.array(ytrain), numpy.array(Xval), numpy.array(yval)
             # Fit model
             clf.fit(Xtrain, ytrain)
             # Validate and test model
             temp = clf.predict(Xval)
-            for i in validation_indices:
-                predicted[i] = temp[i]
+            for i in range(len(temp)):
+                predicted[index_mapper[i]] = temp[i]
             temp = clf.predict(Xtest)
             predicted_test = [predicted_test[i]+temp[i] for i in range(len(temp))] if len(predicted_test) == len(temp) else temp
         # Now average the predicted lists
- #       for i in range(len(predicted)):
-#            predicted[i] = 1 if predicted[i] >= int(kfold/2) else 0
         for i in range(len(predicted_test)):
             predicted_test[i] = 1 if predicted_test[i] >= int(kfold/2) else 0
 
@@ -266,24 +269,26 @@ def predictAndTestKFoldTree(X, y, Xtest, ytest, criterion="gini", splitter="best
         for training_indices, validation_indices in kf.split(X):
             # Populate training and validation matrices
             Xtrain, ytrain, Xval, yval = [], [], [], []
+            index_mapper, index_counter = {}, 0
             for ti in training_indices:
                 Xtrain.append(X[ti])
                 ytrain.append(y[ti])
             for vi in validation_indices:
                 Xval.append(X[vi])
                 yval.append(y[vi])
+                index_mapper[index_counter] = vi
+                index_counter += 1
             # Prepare data
             Xtrain, ytrain, Xval, yval = numpy.array(Xtrain), numpy.array(ytrain), numpy.array(Xval), numpy.array(yval)
             # Fit model
             clf.fit(Xtrain, ytrain)
             # Validate and test model
             temp = clf.predict(Xval)
-            predicted = [predicted[i]+temp[i] for i in range(len(temp))] if len(predicted) == len(temp) else temp
+            for i in range(len(temp)):
+                predicted[index_mapper[i]] = temp[i]
             temp = clf.predict(Xtest)
             predicted_test = [predicted_test[i]+temp[i] for i in range(len(temp))] if len(predicted_test) == len(temp) else temp
         # Now average the predicted lists
-        for i in range(len(predicted)):
-            predicted[i] = 1 if predicted[i] >= int(kfold/2) else 0
         for i in range(len(predicted_test)):
             predicted_test[i] = 1 if predicted_test[i] >= int(kfold/2) else 0
 
