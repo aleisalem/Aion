@@ -354,7 +354,7 @@ def main():
             prettyPrint("Precision: %s" % str(metrics["precision"]), "output")
             prettyPrint("F1 Score: %s" %  str(metrics["f1score"]), "output")
             # The average metrics for test dataset
-            prettyPrint("Metrics for test dataaset using %s" % (arguments.kfold, arguments.algorithm), "output")
+            prettyPrint("Metrics for test dataaset using %s-fold cross validation and %s" % (arguments.kfold, arguments.algorithm), "output")
             prettyPrint("Accuracy: %s" % str(metrics_test["accuracy"]), "output")
             prettyPrint("Recall: %s" % str(metrics_test["recall"]), "output")
             prettyPrint("Specificity: %s" % str(metrics_test["specificity"]), "output")
