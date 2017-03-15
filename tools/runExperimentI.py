@@ -58,7 +58,7 @@ def main():
             reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             iteration += 1
-            if arguments.analyzeapks == "yes":
+            if arguments.analyzeapks == "yes" or iteration > 1:
                 # Define paths to Android SDK tools
                 monkeyRunnerPath = arguments.sdkdir + "/tools/bin/monkeyrunner"
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
@@ -83,16 +83,6 @@ def main():
 
                 genyProcess = None # A (dummy) handle to the genymotion player process
                 for path in allAPKs:
-                    # 0. Check whether the app has already been analyzed
-                    if arguments.algorithm == "svm" or arguments.algorithm == "tree":
-                        if os.path.exists(path.replace("apk", arguments.fileextension)):
-                            prettyPrint("App has already been analyzed. Skipping", "warning")
-                            continue
-                    else:
-                        if os.path.exists(path.replace(".apk", ".json")):
-                            prettyPrint("App has already been analyzed. Skipping", "warning")
-                            continue
-                        
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
                     currentAPK = Garfield(path, APKType)
