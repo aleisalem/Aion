@@ -35,6 +35,7 @@ def defineArguments():
     parser.add_argument("-w", "--hmmtrainwith", help="Whether to train the HMM with malicious or benign instances", required=False, default="malware", choices=["malware", "goodware"])
     parser.add_argument("-l", "--hmmtracelength", help="The maximum trace length to consider during testing", required=False, default=50)
     parser.add_argument("-e", "--hmmthreshold", help="The likelihood threshold to apply during testing", required=False, default=-500)
+    parser.add_argument("-o", "--outfile", help="The path to the file to log classification results", required=False, default="")
     return parser
 
 def main():
@@ -178,14 +179,14 @@ def main():
                     apkFileName = path[path.rfind("/")+1:].replace(".apk","")
                     if currentAPK.APKType == "malware": 
                          if path.find("training") != -1:
-                             jsonTraceFile = open("%s/%s.json" % (arguments.malwaredir, apkFileName), "w")
+                             jsonTraceFile = open("%s/%s_%s.json" % (arguments.malwaredir, apkFileName, arguments.vmname), "w")
                          else:
-                             jsonTraceFile = open("%s/%s.json" % (arguments.malwaredirtest, apkFileName), "w")
+                             jsonTraceFile = open("%s/%s_%s.json" % (arguments.malwaredirtest, apkFileName, arguments.vmname), "w")
                     else:
                         if path.find("training") != -1:
-                            jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredir, apkFileName), "w")
+                            jsonTraceFile = open("%s/%s_%s.json" % (arguments.goodwaredir, apkFileName, arguments.vmname), "w")
                         else:
-                            jsonTraceFile = open("%s/%s.json" % (arguments.goodwaredirtest, apkFileName), "w")
+                            jsonTraceFile = open("%s/%s_%s.json" % (arguments.goodwaredirtest, apkFileName, arguments.vmname), "w")
                     # 7.b. Write content
                     jsonTraceFile.write(jsonTrace)
                     jsonTraceFile.close()
@@ -207,14 +208,14 @@ def main():
                     features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
                     if currentAPK.APKType == "malware":
                         if path.find("training") != -1:
-                            featuresFile = open("%s/%s.%s" % (arguments.malwaredir, apkFileName, arguments.fileextension), "w")
+                            featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
                         else:
-                            featuresFile = open("%s/%s.%s" % (arguments.malwaredirtest, apkFileName, arguments.fileextension), "w")
+                            featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredirtest, apkFileName, arguments.vmname, arguments.fileextension), "w")
                     else:
                         if path.find("training") != -1:
-                            featuresFile = open("%s/%s.%s" % (arguments.goodwaredir, apkFileName, arguments.fileextension), "w")
+                            featuresFile = open("%s/%s_%s.%s" % (arguments.goodwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
                         else:
-                           featuresFile = open("%s/%s.%s" % (arguments.goodwaredirtest, apkFileName, arguments.fileextension), "w")
+                           featuresFile = open("%s/%s_%s.%s" % (arguments.goodwaredirtest, apkFileName, arguments.vmname, arguments.fileextension), "w")
 
 
                     featuresFile.write("%s\n" % str(features)[1:-1])
@@ -350,7 +351,15 @@ def main():
             prettyPrint("Specificity: %s" % str(metrics_test["specificity"]), "output")
             prettyPrint("Precision: %s" % str(metrics_test["precision"]), "output")
             prettyPrint("F1 Score: %s" %  str(metrics_test["f1score"]), "output")
-            
+            # Log results to the outfile
+            outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % arguments.vmname
+            f = open(outfile, "a")
+            f.write("-----------------------------------------------")
+            f.write("| Metrics: iteration %s, timestamp: %s |" % (iteration, getTimestamp()))
+            f.write("-----------------------------------------------")
+            f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s" % (metrics["accuracy"], metrics["recall"], metrics["specificity"], metrics["precision"], metrics["f1score"]))
+            f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s" % (metrics_test["accuracy"], metrics_test["recall"], metrics_test["specificity"], metrics_test["precision"], metrics_test["f1score"])) 
+            f.close()
 
             # Save incorrectly-classified training instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
