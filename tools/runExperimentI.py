@@ -59,7 +59,7 @@ def main():
             reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             iteration += 1
-            if arguments.analyzeapks == "yes" or iteration > 1:
+            if arguments.analyzeapks == "yes":
                 # Define paths to Android SDK tools
                 monkeyRunnerPath = arguments.sdkdir + "/tools/bin/monkeyrunner"
                 adbPath = arguments.sdkdir + "/platform-tools/adb"
@@ -87,6 +87,10 @@ def main():
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
                     currentAPK = Garfield(path, APKType)
+
+                    if not currentAPK:
+                        prettyPrint("Skipping over APK", "warning")
+                        continue
  
                     if verboseON():
                         prettyPrint("Analyzing APK: \"%s\"" % path, "debug")
