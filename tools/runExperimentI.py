@@ -82,7 +82,7 @@ def main():
                     prettyPrint("Could not find any APK's to analyze", "error")
                     return False
 
-                genyProcess = None # A (dummy) handle to the genymotion player process
+                #genyProcess = None # A (dummy) handle to the genymotion player process TODO Not needed anymore?
                 for path in allAPKs:
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
@@ -95,14 +95,9 @@ def main():
                     if verboseON():
                         prettyPrint("Analyzing APK: \"%s\"" % path, "debug")
 
-                    # 1.a. Analyze APK
+                    # 1 Analyze APK
                     if not currentAPK.analyzeAPK():
                         prettyPrint("Analysis of APK \"%s\" failed. Skipping" % path, "warning")
-                        continue
-                    
-                    # 1.b. Check whether trace is saved from previous runs/iterations
-                    if os.path.exists("%s/files/tmp/%s_%s.trace" % (getProjectDir(), currentAPK.APK.package, currentAPK.APKType)):
-                        prettyPrint("Found a saved trace for %s. Skipping analysis" % currentAPK.APK.package, "info2")
                         continue
 
                     # 2. Generate Monkeyrunner script
@@ -114,8 +109,11 @@ def main():
                     vboxRestoreCmd = ["vboxmanage", "snapshot", arguments.vmname, "restore", arguments.vmsnapshot]
                     vboxPowerOffCmd = ["vboxmanage", "controlvm", arguments.vmname, "poweroff"]
                     genymotionStartCmd = ["/opt/genymobile/genymotion/player", "--vm-name", arguments.vmname]
+                    genymotionPowerOffCmd = ["/opt/genymobile/genymotion/player", "--poweroff", "--vm-name", arguments.vmname]
                     monkeyRunnerCmd = [monkeyRunnerPath, currentAPK.runnerScript]
-                    adbPullCmd = [adbPath, "pull", "/data/data/%s/databases/introspy.db" % str(currentAPK.APK.package)]
+                    introspyDBName = "introspy_%s.db" % arguments.vmname
+                    adbPullCmd = [adbPath, "pull", "/data/data/%s/databases/introspy.db" % str(currentAPK.APK.package), introspyDBName]
+                    getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", arguments.vmname]
 
                     # 3. Prepare the Genymotion virtual Android device
                     # 3.a. Restore vm to given snapshot
@@ -148,27 +146,45 @@ def main():
                         prettyPrint("Waiting for machine to boot ...", "debug")
                     time.sleep(20)
 
+                    # 3.c. Get the Ip address assigned to the AVD
+                    result = subprocess.Popen(getAVDIPCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0].replace(' ', '')
+                    if result.lower().find("error") != -1:
+                         prettyPrint("Unable to retrieve the IP address of the AVD", "error")
+                         print result
+                         continue
+                    index = result.find("androvm_ip_management,value:")+len("androvm_ip_management,value:")+1
+                    avdIP = ""
+                    while result[index] != ',':
+                        avdIP += result[index]
+                        index += 1
+                    adbID = "%s:5555" % avdIP
+                    # 3.d. Edit the runner script to include the IP
+                    scriptContent = open(currentAPK.runnerScript).read()
+                    scriptContent = scriptContent.replace("[ANDROID_VIRTUAL_DEVICE_ID]", adbID)
+                    open(currentAPK.runnerScript, "w").write(scriptContent)
+
                     # 4. Run the generated script
                     prettyPrint("Launching the fuzzing script \"%s\"" % currentAPK.runnerScript)
                     result = subprocess.Popen(monkeyRunnerCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
                     while result.lower().find("socket") != -1:
                         prettyPrint("An error occured while running the monkey script. Re-running", "warning")
                         result = subprocess.Popen(monkeyRunnerCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                        
+                    
+                    os.remove(currentAPK.runnerScript) # Delete the script # TODO: Maybe we can keep it later
                     # 5. Download the introspy.db
-                    #x = raw_input("continue? ")
                     subprocess.Popen(adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
                     # 6. Analyze the downloaded database
                     # 6.a. Check that the database exists and is not empty
-                    if os.path.exists("introspy.db"):
-                        if int(os.path.getsize("introspy.db")) == 0:
+                    if os.path.exists(introspyDBName):
+                        if int(os.path.getsize(introspyDBName)) == 0:
                             prettyPrint("The database generated by Introspy is empty. Skipping", "warning")
-                            subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                            genyProcess.kill()
+                            subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                            #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                            #genyProcess.kill()
                             continue
                     # Last line of defense
                     try:
-                        db = introspy.DBAnalyzer("introspy.db", "foobar")
+                        db = introspy.DBAnalyzer(introspyDBName, "foobar")
                     except sqlite3.OperationalError as sql:
                         prettyPrint("The database generated by Introspy is probably empty. Skipping", "warning")
                         continue
@@ -228,11 +244,12 @@ def main():
                     prettyPrint("Done analyzing \"%s\"" % currentAPK.APK.package)
                     
                     # Delete old introspy.db file
-                    os.remove("introspy.db")
+                    os.remove(introspyDBName)
  
                     # Shutdown the genymotion machine
-                    subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    genyProcess.kill()
+                    subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                    #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                    #genyProcess.kill()
 
             ####################################################################
             # Load the JSON  and feature files as traces before classification #

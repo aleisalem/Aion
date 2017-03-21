@@ -76,7 +76,7 @@ class Garfield():
             monkeyScript.write("receivers = %s\n\n" % self.receiversInfo)
             # Connect to the current device and install package
             monkeyScript.write("print \"[*] Connecting to device.\"\n")
-            monkeyScript.write("device = MonkeyRunner.waitForConnection()\n")
+            monkeyScript.write("device = MonkeyRunner.waitForConnection(\"[ANDROID_VIRTUAL_DEVICE_ID]\")\n")
             monkeyScript.write("package = '%s'\n" % self.APK.package)
             monkeyScript.write("print \"[*] Uninstalling package %s (if exists)\"\n" % self.APK.package)
             monkeyScript.write("device.removePackage(package)\n")
