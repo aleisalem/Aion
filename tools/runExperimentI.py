@@ -86,6 +86,10 @@ def main():
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
                     currentAPK = Garfield(path, APKType)
+
+                    if not currentAPK:
+                        prettyPrint("Skipping over APK", "warning")
+                        continue
  
                     if verboseON():
                         prettyPrint("Analyzing APK: \"%s\"" % path, "debug")

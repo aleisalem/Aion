@@ -18,7 +18,8 @@ class Garfield():
     
     def __init__(self, pathToAPK, APKType="goodware"):
         if not os.path.exists(pathToAPK):
-             raise APKNotFoundException("APK file \"%s\" does not exist" % pathToAPK)
+            prettyPrint("Could not find the APK \"%s\"" % pathToAPK, "warning")
+            return None
         self.APKPath = pathToAPK
         self.APK, self.DEX, self.VMAnalysis = None, None, None
         self.activitiesInfo, self.servicesInfo, self.receiversInfo = {}, {}, {}
