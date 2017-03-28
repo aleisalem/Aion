@@ -54,7 +54,7 @@ class Garfield():
         prettyPrint("Success")
         return True
 
-    def generateRunnerScript(self, runningTime=60):
+    def generateRunnerScript(self, scriptPath="", runningTime=60):
         """Generates a python script to be run by Monkeyrunner"""
         try:
             # Check whether the APK has been analyzed first
@@ -62,7 +62,7 @@ class Garfield():
                 prettyPrint("APK needs to be analyzed first", "warning")
                 return False
 
-            self.runnerScript = "%s/files/scripts/%s.py" % (getProjectDir(), getRandomAlphaNumeric())
+            self.runnerScript = "%s/files/scripts/%s.py" % (getProjectDir(), getRandomAlphaNumeric()) if scriptPath == "" else scriptPath
             monkeyScript = open(self.runnerScript, "w")
             # Preparation
             monkeyScript.write("#!/usr/bin/python\n\n")
@@ -86,10 +86,12 @@ class Garfield():
             monkeyScript.write("print \"[*] Configuring Introspy\"\n")
             monkeyScript.write("device.shell(\"echo 'GENERAL CRYPTO,KEY,HASH,FS,IPC,PREF,URI,WEBVIEW,SSL' > /data/data/%s/introspy.config\" % package)\n")
             monkeyScript.write("device.shell(\"chmod 664 /data/data/%s/introspy.config\" % package)\n")
+            # Get a handle to a file to store the commands issued during runtime
+            monkeyScript.write("commandsFile = open(\"%s_%s.command\", \"w\")\n" % (self.APK.package.replace('.','_'), getRandomAlphaNumeric()))
             # Start app
             #monkeyScript.write("mainActivity = '%s'\n" % APK.APK.get_main_activity()) 
             #monkeyScript.write("device.startActivity(component=package + '/' + mainActivity)\n")
-            # Starting the fuzzing phase for [runningTime] seconds
+            # Starting the fuzzing phase for [runningTime] seconds<F12>
             monkeyScript.write("endTime = time.time() + %s\n" % runningTime)
             monkeyScript.write("print \"[*] Fuzzing app for %s seconds\"\n" % runningTime)
             monkeyScript.write("while time.time() < endTime:\n")
@@ -100,26 +102,31 @@ class Garfield():
             monkeyScript.write("\t\tcurrentActivity = activities.keys()[random.randint(0,len(activities)-1)]\n")
             monkeyScript.write("\t\tprint \"[*] Starting activity: %s\" % currentActivity\n")
             monkeyScript.write("\t\tdevice.startActivity(component=package + '/' + currentActivity)\n")
+            monkeyScript.write("\t\tcommandsFile.write(\"device.startActivity('%s/%s')\\n\" % (package, currentActivity))\n")
             # Choose an action 
             monkeyScript.write("\t\tcurrentAction = activityActions[random.randint(0,len(activityActions)-1)]\n")
-            monkeyScript.write("\t\tprint \"[*] Current action: %s\" % currentAction \n")
+            monkeyScript.write("\t\tprint \"[*] Current action: %s\" % currentAction\n")
             # Touch in a random X,Y position on the screen
             monkeyScript.write("\t\tif currentAction == \"touch\":\n")
             monkeyScript.write("\t\t\twidth, height = int(device.getProperty(\"display.width\")), int(device.getProperty(\"display.height\"))\n")
             monkeyScript.write("\t\t\tX, Y = random.randint(0, width-1), random.randint(0, height-1)\n")
             monkeyScript.write("\t\t\tprint \"[*] Touching screen at (%s,%s)\" % (X,Y)\n")
-            monkeyScript.write("\t\t\tdevice.touch(X, Y, keyEventTypes[random.randint(0,2)])\n")
+            monkeyScript.write("\t\t\teventType = keyEventTypes[random.randint(0,2)]\n")
+            monkeyScript.write("\t\t\tdevice.touch(X, Y, eventType)\n")
+            monkeyScript.write("\t\t\tcommandsFile.write(\"device.touch(%s, %s, %s)\\n\" % (X, Y, eventType))\n")
             # Type something random
             monkeyScript.write("\t\telif currentAction == \"type\":\n")
             monkeyScript.write("\t\t\ttext = \"%s\"\n" % getRandomString(random.randint(0,100)))
             monkeyScript.write("\t\t\tprint \"[*] Typing %s\" % text\n")
-            monkeyScript.write("\t\t\tdevice.type(\"text\")\n")
+            monkeyScript.write("\t\t\tdevice.type(text)\n")
+            monkeyScript.write("\t\t\tcommandsFile.write(\"device.type('%s')\\n\" % text)\n")
             # Press a random key up/down
             monkeyScript.write("\t\telif currentAction == \"press\":\n")
             monkeyScript.write("\t\t\taction = keyEvents[random.randint(0, len(keyEvents)-1)]\n")
             monkeyScript.write("\t\t\taType =  keyEventTypes[random.randint(0,2)]\n")
             monkeyScript.write("\t\t\tprint \"[*] Pressing: %s as %s\" % (action, aType)\n")
             monkeyScript.write("\t\t\tdevice.press(action, aType)\n")
+            monkeyScript.write("\t\t\tcommandsFile.write(\"device.press(%s, %s)\\n\" % (action, aType)) \n")
             # Randomly drag the screen
             monkeyScript.write("\t\telif currentAction == \"drag\":\n")
             monkeyScript.write("\t\t\twidth, height = int(device.getProperty(\"display.width\")), int(device.getProperty(\"display.height\"))\n")
@@ -127,6 +134,7 @@ class Garfield():
             monkeyScript.write("\t\t\tend = (random.randint(0, width-1), random.randint(0, height-1))\n")
             monkeyScript.write("\t\t\tprint \"[*] Dragging screen from %s to %s\" % (start, end)\n")
             monkeyScript.write("\t\t\tdevice.drag(start, end)\n")
+            monkeyScript.write("\t\t\tcommandsFile.write(\"device.drag(%s, %s)\\n\" % (start, end))\n")
             # 2.b.Services
             monkeyScript.write("\telif componentType == \"service\":\n")
             monkeyScript.write("\t\tcurrentService = services.keys()[random.randint(0, len(services)-1)]\n")
@@ -136,6 +144,7 @@ class Garfield():
             monkeyScript.write("\t\t\t\tintentAction = services[currentService][\"intent-filters\"][\"action\"][0]\n")
             monkeyScript.write("\t\t\t\tprint \"[*] Broadcasting intent: %s\" % intentAction\n")
             monkeyScript.write("\t\t\t\tdevice.broadcastIntent(currentService, intentAction)\n")
+            monkeyScript.write("\t\t\t\tcommandsFile.write(\"device.broadcastIntent('%s', '%s')\\n\" % (currentService, intentAction)) \n")
             # 2.c. Broadcast receivers
             monkeyScript.write("\telif componentType == \"receiver\":\n")
             monkeyScript.write("\t\tcurrentReceiver = receivers.keys()[random.randint(0, len(receivers)-1)]\n")
@@ -145,10 +154,12 @@ class Garfield():
             monkeyScript.write("\t\t\t\tintentAction = receivers[currentReceiver][\"intent-filters\"][\"action\"][0]\n")
             monkeyScript.write("\t\t\t\tprint \"[*] Broadcasting intent: %s\" % intentAction\n")
             monkeyScript.write("\t\t\t\tdevice.broadcastIntent(currentReceiver, intentAction)\n")
+            monkeyScript.write("\t\t\t\tcommandsFile.write(\"device.broadcastIntent('%s', '%s')\\n\" % (currentReceiver, intentAction))\n")
             # Sleep for 0.5 a second
             monkeyScript.write("\ttime.sleep(1)\n")
             # Uninstall package (Still need to fetch the introspy.db file from app directory before uninstallation)
             #monkeyScript.write("device.removePackage(package)\n")
+            monkeyScript.write("commandsFile.close()")
         
         except Exception as e:
             prettyPrintError(e)
