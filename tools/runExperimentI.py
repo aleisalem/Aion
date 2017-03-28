@@ -27,7 +27,7 @@ def defineArguments():
     parser.add_argument("-t", "--analysistime", help="How long to run monkeyrunner (in seconds)", required=False, default=60)
     parser.add_argument("-v", "--vmname", help="The name of the Genymotion machine to use for analysis", required=False, default="")
     parser.add_argument("-z", "--vmsnapshot", help="The name of the snapshot to restore before analyzing an APK", required=False, default="")
-    parser.add_argument("-a", "--algorithm", help="The machine learning algorithm to use for classification", required=False, default="hmm", choices=["hmm", "associative", "svm"])
+    parser.add_argument("-a", "--algorithm", help="The machine learning algorithm to use for classification", required=True, choices=["hmm", "associative", "svm"])
     parser.add_argument("-k", "--kfold", help="Whether to use k-fold cross validation and the value of \"K\"", required=False, default=2)
     parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="txt")
     parser.add_argument("-u", "--svmusessk", help="Whether to use the SSK kernel with SVM", required=False, default="no", choices=["yes", "no"])
@@ -82,8 +82,12 @@ def main():
                     prettyPrint("Could not find any APK's to analyze", "error")
                     return False
 
-                #genyProcess = None # A (dummy) handle to the genymotion player process TODO Not needed anymore?
                 for path in allAPKs:
+                    # 0. Ignore previously-analyzed APK's (Used for testing purposes)
+                    #if os.path.exists(path.replace(".apk", "_%s.%s" % (arguments.vmname, arguments.fileextension))):
+                    #    prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
+                    #    continue
+
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
                     currentAPK = Garfield(path, APKType)
@@ -129,8 +133,6 @@ def main():
                             return False
                         prettyPrint("Error encountered while restoring the snapshot \"%s\". Retrying ... %s" % (arguments.vmsnapshot, attempts), "warning")
                         # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
-                        if genyProcess:
-                            genyProcess.kill()
                         subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
                         # Now attempt restoring the snapshot
                         result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
@@ -248,8 +250,6 @@ def main():
  
                     # Shutdown the genymotion machine
                     subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    #genyProcess.kill()
 
             ####################################################################
             # Load the JSON  and feature files as traces before classification #
@@ -260,6 +260,7 @@ def main():
             allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
             allTraceFilesTest = glob.glob("%s/*.json" % arguments.malwaredirtest) + glob.glob("%s/*.json" % arguments.goodwaredirtest)
                 
+            metrics, metrics_test = {}, {}
             #######################
             # Hidden Markov Model #
             #######################
@@ -355,9 +356,12 @@ def main():
                 predicted, predicted_test = ScikitLearners.predictAndTestKFoldTree(X, y, Xtest, ytest, kfold=int(arguments.kfold))
                 metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
                 
+            # Make sure the metrics are not empty
             if len(metrics) < 5 or len(metrics_test) < 5:
-                prettyPrint("FATAL ERROR: Either or both metrics dicts are incomplete", "error")
+                prettyPrint("FATAL: The recorded metrics are not complete. Exiting", "error")
+                print metrics, metrics_test
                 return False
+
             # The average metrics for training dataset
             prettyPrint("Metrics using %s-fold cross validation and %s" % (arguments.kfold, arguments.algorithm), "output")
             prettyPrint("Accuracy: %s" % str(metrics["accuracy"]), "output")
@@ -375,11 +379,11 @@ def main():
             # Log results to the outfile
             outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % arguments.vmname
             f = open(outfile, "a")
-            f.write("-----------------------------------------------")
-            f.write("| Metrics: iteration %s, timestamp: %s |" % (iteration, getTimestamp()))
-            f.write("-----------------------------------------------")
-            f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s" % (metrics["accuracy"], metrics["recall"], metrics["specificity"], metrics["precision"], metrics["f1score"]))
-            f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s" % (metrics_test["accuracy"], metrics_test["recall"], metrics_test["specificity"], metrics_test["precision"], metrics_test["f1score"])) 
+            f.write("-----------------------------------------------\n")
+            f.write("| Metrics: iteration %s, timestamp: %s |\n" % (iteration, getTimestamp()))
+            f.write("-----------------------------------------------\n")
+            f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics["accuracy"], metrics["recall"], metrics["specificity"], metrics["precision"], metrics["f1score"]))
+            f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics_test["accuracy"], metrics_test["recall"], metrics_test["specificity"], metrics_test["precision"], metrics_test["f1score"])) 
             f.close()
 
             # Save incorrectly-classified training instances for re-analysis
