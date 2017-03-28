@@ -106,7 +106,7 @@ def main():
                         continue
 
                     # 2. Generate Monkeyrunner script
-                    if not currentAPK.generateRunnerScript(int(arguments.analysistime)):
+                    if not currentAPK.generateRunnerScript(runningTime=int(arguments.analysistime)):
                         prettyPrint("Generation of \"Monkeyrunner\" script failed. Skipping", "warning")
                         continue
 
