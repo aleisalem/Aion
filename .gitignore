@@ -15,3 +15,6 @@ conf/*
 
 # ignore python files in scripts directory
 files/scripts/*
+
+# Ignore "command" files
+*.command
