@@ -85,10 +85,12 @@ def main():
 
                 for path in allAPKs:
                     if not reanalysis:
-                        # 0. Ignore previously-analyzed APK's (Used for testing purposes)
+                        # 0. Ignore previously-analyzed APK's that are not in for re-analysis
                         if os.path.exists(path.replace(".apk", "_%s.%s" % (arguments.vmname, arguments.fileextension))):
-                            prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
-                            continue
+                            # Second line of defense
+                            if not path in reanalyzeMalware + reanalyzeGoodware:
+                                prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
+                                continue
 
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
