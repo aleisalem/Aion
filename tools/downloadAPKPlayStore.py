@@ -5,10 +5,6 @@ from Aion.utils.graphics import * # Needed for pretty printing
 
 import os, sys, glob, shutil, argparse, subprocess
 
-# Used in case of saving downloaded APK's to another machine
-SSH_USERNAME = "aesalem"
-SSH_PASSWORD = "8aa259f4c7"
-
 def defineArguments():
     parser = argparse.ArgumentParser(prog="downloadAPKPlayStore.py", description="Uses \"Aion\"'s Play Store crawler to download APK's of benign applications.")
     parser.add_argument("-m", "--mode", help="Help", required=True, choices=["download-all", "download-category", "download-subcategory", "update"])
