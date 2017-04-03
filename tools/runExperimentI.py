@@ -84,10 +84,13 @@ def main():
                     return False
 
                 for path in allAPKs:
-                    # 0. Ignore previously-analyzed APK's (Used for testing purposes)
-                    #if os.path.exists(path.replace(".apk", "_%s.%s" % (arguments.vmname, arguments.fileextension))):
-                    #    prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
-                    #    continue
+                    if not reanalysis:
+                        # 0. Ignore previously-analyzed APK's that are not in for re-analysis
+                        if os.path.exists(path.replace(".apk", "_%s.%s" % (arguments.vmname, arguments.fileextension))):
+                            # Second line of defense
+                            if not path in reanalyzeMalware + reanalyzeGoodware:
+                                prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
+                                continue
 
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
@@ -386,7 +389,7 @@ def main():
             outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % arguments.vmname
             f = open(outfile, "a")
             f.write("-----------------------------------------------\n")
-            f.write("| Metrics: iteration %s, timestamp: %s |\n" % (iteration, getTimestamp()))
+            f.write("| Metrics: iteration %s, timestamp: %s |\n" % (iteration-1, getTimestamp()))
             f.write("-----------------------------------------------\n")
             f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics["accuracy"], metrics["recall"], metrics["specificity"], metrics["precision"], metrics["f1score"]))
             f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics_test["accuracy"], metrics_test["recall"], metrics_test["specificity"], metrics_test["precision"], metrics_test["f1score"])) 
@@ -398,18 +401,18 @@ def main():
                 if predicted[index] != y[index]:
                     if arguments.algorithm == "hmm":
                         if allJSONFiles[index].find("malware") != -1:
-                            reanalyzeMalware.append(allJSONFiles[index])
+                            reanalyzeMalware.append(allJSONFiles[index].replace("_%s" % arguments.vmname, ""))
                         else:
-                            reanalyzeGoodware.append(allJSONFiles[index])
+                            reanalyzeGoodware.append(allJSONFiles[index].replace("_%s" % arguments.vmname, ""))
                         # Also delete the file
                         # os.unlink(allJSONFiles[index])
   
                     else:
                         # malware instances are in hashes whereas this appends their package names to the list. Update either!!
                         if allFeatureFiles[index].find("malware") != -1:
-                            reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
+                            reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk").replace("_%s" % arguments.vmname, ""))
                         else:
-                            reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
+                            reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk").replace("_%s" % arguments.vmname, ""))
                         # Also delete the files (.json and .[fileextension])
                         #os.unlink(allFeatureFiles[index])
                         #os.unlink(allFeatureFiles[index].replace(".num", ".json")) 

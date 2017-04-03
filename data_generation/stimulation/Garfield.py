@@ -63,6 +63,7 @@ class Garfield():
                 return False
 
             self.runnerScript = "%s/files/scripts/%s.py" % (getProjectDir(), getRandomAlphaNumeric()) if scriptPath == "" else scriptPath
+            print self.runnerScript
             monkeyScript = open(self.runnerScript, "w")
             # Preparation
             monkeyScript.write("#!/usr/bin/python\n\n")
@@ -87,7 +88,7 @@ class Garfield():
             monkeyScript.write("device.shell(\"echo 'GENERAL CRYPTO,KEY,HASH,FS,IPC,PREF,URI,WEBVIEW,SSL' > /data/data/%s/introspy.config\" % package)\n")
             monkeyScript.write("device.shell(\"chmod 664 /data/data/%s/introspy.config\" % package)\n")
             # Get a handle to a file to store the commands issued during runtime
-            monkeyScript.write("commandsFile = open(\"%s_%s.command\", \"w\")\n" % (self.APK.package.replace('.','_'), getRandomAlphaNumeric()))
+            monkeyScript.write("commandsFile = open(\"%s/files/scripts/%s_%s.command\", \"w\")\n" % (getProjectDir(), self.APK.package.replace('.','_'), getRandomAlphaNumeric()))
             # Start app
             #monkeyScript.write("mainActivity = '%s'\n" % APK.APK.get_main_activity()) 
             #monkeyScript.write("device.startActivity(component=package + '/' + mainActivity)\n")
