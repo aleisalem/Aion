@@ -216,7 +216,8 @@ def main():
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
                     # Otherwise, store the features
-                    features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
+                    #features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
+                    features = staticFeatures + dynamicFeatures # TODO: Can static features help with the mediocre specificity scores?
                     if APKType == "malware":
                         if path.find("training") != -1:
                             featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
