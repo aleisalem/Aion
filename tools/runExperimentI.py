@@ -11,6 +11,7 @@ from Aion.utils.misc import *
 from sklearn.metrics import *
 import numpy, ghmm
 import introspy # Used for analysis of introspy generated databases
+from droidutan import Droidutan
 
 import os, sys, glob, shutil, argparse, subprocess, sqlite3
 
@@ -61,10 +62,6 @@ def main():
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             iteration += 1
             if arguments.analyzeapks == "yes":
-                # Define paths to Android SDK tools
-                monkeyRunnerPath = arguments.sdkdir + "/tools/bin/monkeyrunner"
-                adbPath = arguments.sdkdir + "/platform-tools/adb"
-
                 # Retrieve malware APK's
                 malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir) + glob.glob("%s/*.apk" % arguments.malwaredirtest)
                 if len(malAPKs) < 1:
@@ -94,33 +91,20 @@ def main():
 
                     # 1. Statically analyze the APK using androguard
                     APKType = "malware" if path in malAPKs else "goodware"
-                    currentAPK = Garfield(path, APKType)
-
-                    if not currentAPK:
-                        prettyPrint("Skipping over APK", "warning")
-                        continue
+                    apk, dx, vm = Droidutan.analyzeAPK(path)
+                    appComponents = Droidutan.extractAppComponents(apk)
  
                     if verboseON():
                         prettyPrint("Analyzing APK: \"%s\"" % path, "debug")
 
-                    # 1 Analyze APK
-                    if not currentAPK.analyzeAPK():
-                        prettyPrint("Analysis of APK \"%s\" failed. Skipping" % path, "warning")
-                        continue
-
-                    # 2. Generate Monkeyrunner script
-                    if not currentAPK.generateRunnerScript(runningTime=int(arguments.analysistime)):
-                        prettyPrint("Generation of \"Monkeyrunner\" script failed. Skipping", "warning")
-                        continue
-
-                    # Define frequently-used commands
+                    # 2. Define frequently-used commands
+                    adbPath = "%s/platform-tools/adb" % arguments.sdkdir
                     vboxRestoreCmd = ["vboxmanage", "snapshot", arguments.vmname, "restore", arguments.vmsnapshot]
                     vboxPowerOffCmd = ["vboxmanage", "controlvm", arguments.vmname, "poweroff"]
                     genymotionStartCmd = ["/opt/genymobile/genymotion/player", "--vm-name", arguments.vmname]
                     genymotionPowerOffCmd = ["/opt/genymobile/genymotion/player", "--poweroff", "--vm-name", arguments.vmname]
-                    monkeyRunnerCmd = [monkeyRunnerPath, currentAPK.runnerScript]
                     introspyDBName = "introspy_%s.db" % arguments.vmname
-                    adbPullCmd = [adbPath, "pull", "/data/data/%s/databases/introspy.db" % str(currentAPK.APK.package), introspyDBName]
+                    adbPullCmd = [adbPath, "pull", "/data/data/%s/databases/introspy.db" % appComponents["package_name"], introspyDBName]
                     getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", arguments.vmname]
 
                     # 3. Prepare the Genymotion virtual Android device
@@ -158,25 +142,22 @@ def main():
                          prettyPrint("Unable to retrieve the IP address of the AVD", "error")
                          print result
                          continue
-                    index = result.find("androvm_ip_management,value:")+len("androvm_ip_management,value:")+1
+                    index = result.find("androvm_ip_management,value:")+len("androvm_ip_management,value:")
                     avdIP = ""
                     while result[index] != ',':
                         avdIP += result[index]
                         index += 1
                     adbID = "%s:5555" % avdIP
-                    # 3.d. Edit the runner script to include the IP
-                    scriptContent = open(currentAPK.runnerScript).read()
-                    scriptContent = scriptContent.replace("[ANDROID_VIRTUAL_DEVICE_ID]", adbID)
-                    open(currentAPK.runnerScript, "w").write(scriptContent)
 
-                    # 4. Run the generated script
-                    prettyPrint("Launching the fuzzing script \"%s\"" % currentAPK.runnerScript)
-                    result = subprocess.Popen(monkeyRunnerCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    while result.lower().find("socket") != -1:
-                        prettyPrint("An error occured while running the monkey script. Re-running", "warning")
-                        result = subprocess.Popen(monkeyRunnerCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    
-                    os.remove(currentAPK.runnerScript) # Delete the script # TODO: Maybe we can keep it later
+                    # 4. Test the APK using Droidutan
+                    prettyPrint("Testing the APK using Droidutan")
+                    if not Droidutan.testApp(path, avdSerialno=avdIP, testDuration=int(arguments.analysistime), useIntrospy=True, preExtractedComponents=appComponents):
+                        prettyPrint("An error occurred while testing the APK \"%s\". Skipping" % path, "warning")
+                        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                        #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                        genyProcess.kill()
+                        continue
+
                     # 5. Download the introspy.db
                     subprocess.Popen(adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
                     # 6. Analyze the downloaded database
@@ -207,7 +188,7 @@ def main():
                     # 7. Write trace to malware/goodware dir
                     # 7.a. Get a handle
                     apkFileName = path[path.rfind("/")+1:].replace(".apk","")
-                    if currentAPK.APKType == "malware": 
+                    if APKType == "malware": 
                          if path.find("training") != -1:
                              jsonTraceFile = open("%s/%s_%s.json" % (arguments.malwaredir, apkFileName, arguments.vmname), "w")
                          else:
@@ -236,7 +217,7 @@ def main():
                         continue
                     # Otherwise, store the features
                     features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
-                    if currentAPK.APKType == "malware":
+                    if APKType == "malware":
                         if path.find("training") != -1:
                             featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
                         else:
@@ -251,7 +232,7 @@ def main():
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
 
-                    prettyPrint("Done analyzing \"%s\"" % currentAPK.APK.package)
+                    prettyPrint("Done analyzing \"%s\"" % appComponents["package_name"])
                     
                     # Delete old introspy.db file
                     os.remove(introspyDBName)
