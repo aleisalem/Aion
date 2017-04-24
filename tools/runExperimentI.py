@@ -97,60 +97,62 @@ def main():
                     if verboseON():
                         prettyPrint("Analyzing APK: \"%s\"" % path, "debug")
 
-                    # 2. Define frequently-used commands
-                    adbPath = "%s/platform-tools/adb" % arguments.sdkdir
-                    vboxRestoreCmd = ["vboxmanage", "snapshot", arguments.vmname, "restore", arguments.vmsnapshot]
-                    vboxPowerOffCmd = ["vboxmanage", "controlvm", arguments.vmname, "poweroff"]
-                    genymotionStartCmd = ["/opt/genymobile/genymotion/player", "--vm-name", arguments.vmname]
-                    genymotionPowerOffCmd = ["/opt/genymobile/genymotion/player", "--poweroff", "--vm-name", arguments.vmname]
-                    introspyDBName = "introspy_%s.db" % arguments.vmname
-                    adbPullCmd = [adbPath, "pull", "/data/data/%s/databases/introspy.db" % appComponents["package_name"], introspyDBName]
+                    # 2. Get the Ip address assigned to the AVD
                     getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", arguments.vmname]
-
-                    # 3. Prepare the Genymotion virtual Android device
-                    # 3.a. Restore vm to given snapshot
-                    if verboseON():
-                        prettyPrint("Restoring snapshot \"%s\"" % arguments.vmsnapshot, "debug")
-                    result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    attempts = 1
-                    while result.lower().find("error") != -1:
-                        print result
-                        # Retry restoring snapshot for 10 times and then exit
-                        if attempts == 10:
-                            prettyPrint("Failed to restore snapshot \"%s\" after 10 attempts. Exiting" % arguments.vmsnapshot, "error")
-                            return False
-                        prettyPrint("Error encountered while restoring the snapshot \"%s\". Retrying ... %s" % (arguments.vmsnapshot, attempts), "warning")
-                        # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
-                        subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                        # Now attempt restoring the snapshot
-                        result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                        attempts += 1
-                        time.sleep(1)
-
-                    # 3.b. Start the Genymotion Android virtual device
-                    if verboseON():
-                        prettyPrint("Starting the Genymotion machine \"%s\"" % arguments.vmname, "debug")
-
-                    genyProcess = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    if verboseON():
-                        prettyPrint("Waiting for machine to boot ...", "debug")
-                    time.sleep(int(arguments.waitboot))
-
-                    # 3.c. Get the Ip address assigned to the AVD
                     result = subprocess.Popen(getAVDIPCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0].replace(' ', '')
                     if result.lower().find("error") != -1:
                          prettyPrint("Unable to retrieve the IP address of the AVD", "error")
                          print result
                          continue
                     index = result.find("androvm_ip_management,value:")+len("androvm_ip_management,value:")
-                    avdIP = ""
                     while result[index] != ',':
                         avdIP += result[index]
                         index += 1
                     adbID = "%s:5555" % avdIP
 
-                    # 4. Test the APK using Droidutan
+                    # 3. Define frequently-used commands
+                    adbPath = "%s/platform-tools/adb" % arguments.sdkdir
+                    vboxRestoreCmd = ["vboxmanage", "snapshot", arguments.vmname, "restore", arguments.vmsnapshot]
+                    vboxPowerOffCmd = ["vboxmanage", "controlvm", arguments.vmname, "poweroff"]
+                    genymotionStartCmd = ["/opt/genymobile/genymotion/player", "--vm-name", arguments.vmname]
+                    genymotionPowerOffCmd = ["/opt/genymobile/genymotion/player", "--poweroff", "--vm-name", arguments.vmname]
+                    introspyDBName = "introspy_%s.db" % arguments.vmname
+                    adbPullCmd = [adbPath, "-s", adbID, "pull", "/data/data/%s/databases/introspy.db" % appComponents["package_name"], introspyDBName]
+                    appUninstallCmd = [adbPath, "-s", adbID, "uninstall", appComponents["package_name"]]
+
+                    # 4. Prepare the Genymotion virtual Android device
+                    # 4.a. Restore vm to given snapshot
+                    #if verboseON():
+                    #    prettyPrint("Restoring snapshot \"%s\"" % arguments.vmsnapshot, "debug")
+                    #result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+                    #attempts = 1
+                    #while result.lower().find("error") != -1:
+                    #    print result
+                    #    # Retry restoring snapshot for 10 times and then exit
+                    #    if attempts == 10:
+                    #        prettyPrint("Failed to restore snapshot \"%s\" after 10 attempts. Exiting" % arguments.vmsnapshot, "error")
+                    #        return False
+                    #    prettyPrint("Error encountered while restoring the snapshot \"%s\". Retrying ... %s" % (arguments.vmsnapshot, attempts), "warning")
+                    #    # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
+                    #    subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                    #    # Now attempt restoring the snapshot
+                    #    result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+                    #    attempts += 1
+                    #    time.sleep(1)
+
+                    # 4.b. Start the Genymotion Android virtual device
+                    #if verboseON():
+                    #    prettyPrint("Starting the Genymotion machine \"%s\"" % arguments.vmname, "debug")
+
+                    #genyProcess = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                    #if verboseON():
+                    #    prettyPrint("Waiting for machine to boot ...", "debug")
+                    #time.sleep(int(arguments.waitboot))
+
+
+                    # 5. Test the APK using Droidutan TODO: Assuming the machine is already on!
                     prettyPrint("Testing the APK using Droidutan")
+                    # 5.a. Unleash Droidutan
                     if not Droidutan.testApp(path, avdSerialno=avdIP, testDuration=int(arguments.analysistime), useIntrospy=True, preExtractedComponents=appComponents):
                         prettyPrint("An error occurred while testing the APK \"%s\". Skipping" % path, "warning")
                         subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
@@ -158,8 +160,13 @@ def main():
                         genyProcess.kill()
                         continue
 
-                    # 5. Download the introspy.db
+                    # 5.b. Download the introspy.db
                     subprocess.Popen(adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+
+                    # 5.c. Uninstall the app
+                    prettyPrint("Uninstalling \"%s\" from \"%s\"" % (appComponents["package_name"], adbID))
+                    subprocess.Popen(appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+
                     # 6. Analyze the downloaded database
                     # 6.a. Check that the database exists and is not empty
                     if os.path.exists(introspyDBName):
@@ -202,21 +209,12 @@ def main():
                     jsonTraceFile.write(jsonTrace)
                     jsonTraceFile.close()
 
-                    # 7.c. Introspy's HTML report
-                    #html = introspy.HTMLReportGenerator(db, "foobar") # Second arguments needs to be anythin but ""/None
-                    #targetDir = "%s/%s" % (arguments.malwaredir, apkFileName) if currentAPK.APKType == "malware" else "%s/%s" % (arguments.goodwaredir, apkFileName)
-                    #if os.path.exists(targetDir):
-                    #    shutil.rmtree(targetDir)
-                    # Save new report
-                    #html.write_report_to_directory(targetDir)
-                
-                    # 7.d. Extract and save numerical features for SVM's and Trees
+                    # 7.c. Extract and save numerical features for SVM's and Trees
                     staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(jsonTraceFile.name)
                     if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
                     # Otherwise, store the features
-                    #features = dynamicFeatures #staticFeatures + dynamicFeatures TODO: Let's see what dynamic features do on their own
                     features = staticFeatures + dynamicFeatures # TODO: Can static features help with the mediocre specificity scores?
                     if APKType == "malware":
                         if path.find("training") != -1:
@@ -239,8 +237,8 @@ def main():
                     os.remove(introspyDBName)
  
                     # Shutdown the genymotion machine
-                    subprocess.call(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    genyProcess.kill() # Second line of defense
+                    #subprocess.call(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                    #genyProcess.kill() # Second line of defense
 
             ####################################################################
             # Load the JSON  and feature files as traces before classification #
