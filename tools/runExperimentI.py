@@ -99,6 +99,7 @@ def main():
 
                     # 2. Get the Ip address assigned to the AVD
                     getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", arguments.vmname]
+                    avdIP = ""
                     result = subprocess.Popen(getAVDIPCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0].replace(' ', '')
                     if result.lower().find("error") != -1:
                          prettyPrint("Unable to retrieve the IP address of the AVD", "error")
