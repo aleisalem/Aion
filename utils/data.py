@@ -2,6 +2,18 @@
 
 from Aion.conf import config
 
+def getSDKDir():
+    """Returns the Android SDK directory path"""
+    return config.ANDROID_SDK
+
+def getADBPath():
+    """Returns the path to the adb tool"""
+    return config.ANDROID_ADB
+
+def getGenymotionPlayer():
+    """Returns the path to the Genymotion VM player"""
+    return config.GENYMOTION_PLAYER
+
 def getProjectDir():
     """Returns the absolute path of the project"""
     return config.AION_DIR
@@ -18,7 +30,7 @@ def verboseON():
 
 def loadDirs():
     """Loads the directories' paths from the config.py file"""
-    return {"Aion_DIR": config.Aion_DIR, "DOWNLOADS_DIR": config.DOWNLOADS_DIR}
+    return {"Aion_DIR": config.Aion_DIR, "DOWNLOADS_DIR": config.DOWNLOADS_DIR, "ANDROID_SDK": config.ANDROID_SDK}
 
 def loadPlayStoreConfig():
     """Loads the necessary configurations for crawling the Play Store"""

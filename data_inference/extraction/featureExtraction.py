@@ -40,9 +40,14 @@ def extractAndroguardFeatures(apkPath):
             if apk.get_details_permissions()[p][0] == "dangerous":
                 dangerousPermissions += 1.0 
         features.append(totalPermissions) # No. of permissions
-        features.append(aospPermissions/totalPermissions) # AOSP permissions : Total permissions
-        features.append(thirdPartyPermissions/totalPermissions) # Third-party permissions : Total permissions
-        features.append(dangerousPermissions/totalPermissions) # Dangerous permissions : Total permissions
+        if totalPermissions > 0:
+            features.append(aospPermissions/totalPermissions) # AOSP permissions : Total permissions
+            features.append(thirdPartyPermissions/totalPermissions) # Third-party permissions : Total permissions
+            features.append(dangerousPermissions/totalPermissions) # Dangerous permissions : Total permissions
+        else:
+            features.append(0)
+            features.append(0)
+            features.append(0)
         # 2.b. The DEX-related features
         features.append(float(len(dex.get_classes()))) # Total number of classes
         features.append(float(len(dex.get_strings()))) # Total number of strings

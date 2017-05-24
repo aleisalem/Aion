@@ -7,10 +7,17 @@ AUTH_TOKEN      = # "yyyyyyyyy"
 SEPARATOR       = '|'
 
 # Directories
-AION_DIR 	    = # 'some directory"
+AION_DIR 	= # 'some directory"
 DOWNLOADS_DIR	= AION_DIR + "files/downloads"
 
 # Logging and debug messages
 VERBOSE		    = "ON"
 LOGGING		    = "ON"
 LOG_FILE	    = AION_DIR + "/aion.log"
+
+# Android SDK paths and constants
+ANDROID_SDK = # 'some directory'
+ANDROID_ADB = ANDROID_SDK + "/platform-tools/adb"
+
+# Misc paths
+GENYMOTION_PLAYER = "/opt/genymobile/genymotion/player"

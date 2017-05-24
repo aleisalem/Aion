@@ -21,3 +21,6 @@ files/scripts/*
 
 # Ignore text files
 *.txt
+
+# Ignore back up files
+*.py_bak

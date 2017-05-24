@@ -7,36 +7,32 @@ from Aion.data_inference.extraction.featureExtraction import *
 from Aion.utils.data import *     # Needed for accessing configuration files
 from Aion.utils.graphics import * # Needed for pretty printing
 from Aion.utils.misc import *
+from Aion.shared.DroidutanTest import * # The Droidutan-drive test thread
 
 from sklearn.metrics import *
 import numpy, ghmm
 import introspy # Used for analysis of introspy generated databases
 from droidutan import Droidutan
 
-import os, sys, glob, shutil, argparse, subprocess, sqlite3
+import os, sys, glob, shutil, argparse, subprocess, sqlite3, time, threading
 
 
 
 def defineArguments():
     parser = argparse.ArgumentParser(prog="runExperimentI.py", description="A tool to implement the stimulation-detection feedback loop using Garfield as stimulation engine.")
-    parser.add_argument("-s", "--sdkdir", help="The path to Android SDK", required=True)
     parser.add_argument("-x", "--malwaredir", help="The directory containing the malicious APK's to analyze and use as training/validation dataset", required=True)
     parser.add_argument("-g", "--goodwaredir", help="The directory containing the benign APK's to analyze and use as training/validation dataset", required=True)
     parser.add_argument("-m", "--malwaredirtest", help="The directory containing the malicious APK's to analyze and use as test dataset", required=True)
     parser.add_argument("-b", "--goodwaredirtest", help="The directory containing the benign APK's to analyze and use as test dataset .", required=True)  
     parser.add_argument("-f", "--analyzeapks", help="Whether to perform analysis on the retrieved APK's", required=False, default="no", choices=["yes", "no"])
     parser.add_argument("-t", "--analysistime", help="How long to run monkeyrunner (in seconds)", required=False, default=60)
-    parser.add_argument("-v", "--vmname", help="The name of the Genymotion machine to use for analysis", required=False, default="")
-    parser.add_argument("-z", "--vmsnapshot", help="The name of the snapshot to restore before analyzing an APK", required=False, default="")
-    parser.add_argument("-q", "--waitboot", help="The number of seconds to wait for the Genymotion machine to boot before running the stimulation script", required=False, default=20)
-    parser.add_argument("-a", "--algorithm", help="The machine learning algorithm to use for classification", required=True, choices=["hmm", "associative", "svm"])
+    parser.add_argument("-v", "--vmnames", help="The name(s) of the Genymotion machine(s) to use for analysis (comma-separated)", required=False, default="")
+    parser.add_argument("-z", "--vmsnapshots", help="The name(s) of the snapshot(s) to restore before analyzing an APK (comma-separated)", required=False, default="")
+    parser.add_argument("-a", "--algorithm", help="The machine learning algorithm to use for classification", required=True, choices=["trees", "svm"])
     parser.add_argument("-k", "--kfold", help="Whether to use k-fold cross validation and the value of \"K\"", required=False, default=2)
     parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="txt")
     parser.add_argument("-u", "--svmusessk", help="Whether to use the SSK kernel with SVM", required=False, default="no", choices=["yes", "no"])
     parser.add_argument("-n", "--svmsubsequence", help="The length of the subsequence to consider upon using SVM's with the SSK", required=False, default=3)
-    parser.add_argument("-w", "--hmmtrainwith", help="Whether to train the HMM with malicious or benign instances", required=False, default="malware", choices=["malware", "goodware"])
-    parser.add_argument("-l", "--hmmtracelength", help="The maximum trace length to consider during testing", required=False, default=50)
-    parser.add_argument("-e", "--hmmthreshold", help="The likelihood threshold to apply during testing", required=False, default=-500)
     parser.add_argument("-o", "--outfile", help="The path to the file to log classification results", required=False, default="")
     return parser
 
@@ -46,16 +42,18 @@ def main():
         arguments = argumentParser.parse_args()
         prettyPrint("Welcome to the \"Aion\"'s experiment I")
 
-        # Some sanity checks
-        if not os.path.exists(arguments.sdkdir):
-             prettyPrint("Unable to locate the Android SDK. Exiting", "error")
-             return False
- 
+        if arguments.vmnames == "":
+            prettyPrint("No virtual machine names were supplied. Exiting", "warning")
+            return False
+
         iteration = 1 # Initial values
         reanalysis = False
         currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
         previousMetrics = {"accuracy": -1.0, "recall": -1.0, "specificity": -1.0, "precision": -1.0, "f1score": -1.0}
         reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
+        allVMs = arguments.vmnames.split(',')
+        allSnapshots = arguments.vmsnapshots.split(',')
+        availableVMs = [] + allVMs # Initially
 
         while currentMetrics["f1score"] > previousMetrics["f1score"]:
             reanalysis = True if iteration > 1 else False
@@ -79,163 +77,130 @@ def main():
                 if len(allAPKs) < 1:
                     prettyPrint("Could not find any APK's to analyze", "error")
                     return False
+                
+                ########################
+                ## Main Analysis Loop ##
+                ########################
+                while len(allAPKs) > 0:
 
-                for path in allAPKs:
+                    # Step 1. Pop an APK from "allAPKs" (Defaut: last element)
+                    currentAPK = allAPKs.pop()
+
+                    # Ignore previously-analyzed APK's that are not in for re-analysis
                     if not reanalysis:
-                        # 0. Ignore previously-analyzed APK's that are not in for re-analysis
-                        if os.path.exists(path.replace(".apk", "_%s.%s" % (arguments.vmname, arguments.fileextension))):
+                        if os.path.exists(currentAPK.replace(".apk", ".%s" % arguments.fileextension)):
                             # Second line of defense
-                            if not path in reanalyzeMalware + reanalyzeGoodware:
-                                prettyPrint("APK \"%s\" has been analyzed before. Skipping" % path, "warning")
+                            if not currentAPK in reanalyzeMalware + reanalyzeGoodware:
+                                prettyPrint("APK \"%s\" has been analyzed before. Skipping" % currentAPK, "warning")
                                 continue
 
-                    # 1. Statically analyze the APK using androguard
-                    APKType = "malware" if path in malAPKs else "goodware"
-                    apk, dx, vm = Droidutan.analyzeAPK(path)
-                    appComponents = Droidutan.extractAppComponents(apk)
- 
+                    # Step 2. Check availability of VMs for test
+                    while len(availableVMs) < 1:
+                        prettyPrint("No AVD's available for analysis. Sleeping for %s seconds" % arguments.analysistime)
+                        # 2.a. Sleep for "analysisTime"
+                        time.sleep(int(arguments.analysistime))
+                        # 2.b. Check for available machines
+                        currentThreads = [t.name for t in threading.enumerate()]
+                        for v in allVMs:
+                            if v not in currentThreads:
+                                availableVMs.append(v)
+
+                    # Step 3. Pop one VM from "availableVMs"
+                    currentVM = availableVMs.pop()
+
                     if verboseON():
-                        prettyPrint("Analyzing APK: \"%s\"" % path, "debug")
+                        prettyPrint("Running \"%s\" on AVD \"%s\"" % (currentAPK, currentVM))
 
-                    # 2. Get the Ip address assigned to the AVD
-                    getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", arguments.vmname]
-                    avdIP = ""
-                    result = subprocess.Popen(getAVDIPCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0].replace(' ', '')
-                    if result.lower().find("error") != -1:
-                         prettyPrint("Unable to retrieve the IP address of the AVD", "error")
-                         print result
-                         continue
-                    index = result.find("androvm_ip_management,value:")+len("androvm_ip_management,value:")
-                    while result[index] != ',':
-                        avdIP += result[index]
-                        index += 1
-                    adbID = "%s:5555" % avdIP
+                    # Step 4. Start the analysis thread
+                    tID = int(time.time())
+                    t = DroidutanAnalysis(tID, currentVM, (currentVM, ), currentAPK, int(arguments.analysistime))
+                    t.start()
+                      
+                    prettyPrint("%s APKs left to analyze" % len(allAPKs), "output")
+    
 
-                    # 3. Define frequently-used commands
-                    adbPath = "%s/platform-tools/adb" % arguments.sdkdir
-                    vboxRestoreCmd = ["vboxmanage", "snapshot", arguments.vmname, "restore", arguments.vmsnapshot]
-                    vboxPowerOffCmd = ["vboxmanage", "controlvm", arguments.vmname, "poweroff"]
-                    genymotionStartCmd = ["/opt/genymobile/genymotion/player", "--vm-name", arguments.vmname]
-                    genymotionPowerOffCmd = ["/opt/genymobile/genymotion/player", "--poweroff", "--vm-name", arguments.vmname]
-                    introspyDBName = "introspy_%s.db" % arguments.vmname
-                    adbPullCmd = [adbPath, "-s", adbID, "pull", "/data/data/%s/databases/introspy.db" % appComponents["package_name"], introspyDBName]
-                    appUninstallCmd = [adbPath, "-s", adbID, "uninstall", appComponents["package_name"]]
+                # Just make sure all VMs are done
+                while len(availableVMs) < len(allVMs):
+                    prettyPrint("Waiting for AVD's to complete analysis")
+                    time.sleep(int(arguments.analysistime))
+                    currentThreads = [t.name for t in threading.enumerate()]
+                    for v in allVMs:
+                        if v not in currentThreads:
+                            availableVMs.append(v)
 
-                    # 4. Prepare the Genymotion virtual Android device
-                    # 4.a. Restore vm to given snapshot
-                    #if verboseON():
-                    #    prettyPrint("Restoring snapshot \"%s\"" % arguments.vmsnapshot, "debug")
-                    #result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    #attempts = 1
-                    #while result.lower().find("error") != -1:
-                    #    print result
-                    #    # Retry restoring snapshot for 10 times and then exit
-                    #    if attempts == 10:
-                    #        prettyPrint("Failed to restore snapshot \"%s\" after 10 attempts. Exiting" % arguments.vmsnapshot, "error")
-                    #        return False
-                    #    prettyPrint("Error encountered while restoring the snapshot \"%s\". Retrying ... %s" % (arguments.vmsnapshot, attempts), "warning")
-                    #    # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
-                    #    subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    #    # Now attempt restoring the snapshot
-                    #    result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    #    attempts += 1
-                    #    time.sleep(1)
+                ########################################################
+                ## Analyze all introspy database files after analysis ##
+                ########################################################
+                # Step 0. Retrieve all introspy database files
+                allDBFiles = glob.glob("%s/*.db" % arguments.malwaredir)
+                allDBFiles += glob.glob("%s/*.db" % arguments.goodwaredir)
+                allDBFiles += glob.glob("%s/*.db" % arguments.malwaredirtest)
+                allDBFiles += glob.glob("%s/*.db" % arguments.goodwaredirtest)
+                if len(allDBFiles) < 1:
+                    prettyPrint("Could not retrieve an database files to analyze. Exiting", "warning")
 
-                    # 4.b. Start the Genymotion Android virtual device
-                    #if verboseON():
-                    #    prettyPrint("Starting the Genymotion machine \"%s\"" % arguments.vmname, "debug")
-
-                    #genyProcess = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    #if verboseON():
-                    #    prettyPrint("Waiting for machine to boot ...", "debug")
-                    #time.sleep(int(arguments.waitboot))
-
-
-                    # 5. Test the APK using Droidutan TODO: Assuming the machine is already on!
-                    prettyPrint("Testing the APK using Droidutan")
-                    # 5.a. Unleash Droidutan
-                    if not Droidutan.testApp(path, avdSerialno=avdIP, testDuration=int(arguments.analysistime), useIntrospy=True, preExtractedComponents=appComponents):
-                        prettyPrint("An error occurred while testing the APK \"%s\". Skipping" % path, "warning")
-                        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                        #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                        genyProcess.kill()
+                prettyPrint("Successfully retrieved %s introspy database files to analyze" % len(allDBFiles))
+                # Step 1. Analyze the downloaded database
+                for dbFile in allDBFiles:
+                    # 1.a. Check that the database exists and is not empty
+                    if int(os.path.getsize(dbFile)) == 0:
+                        prettyPrint("The database generated by Introspy is empty. Skipping", "warning")
                         continue
-
-                    # 5.b. Download the introspy.db
-                    subprocess.Popen(adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-
-                    # 5.c. Uninstall the app
-                    prettyPrint("Uninstalling \"%s\" from \"%s\"" % (appComponents["package_name"], adbID))
-                    subprocess.Popen(appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-
-                    # 6. Analyze the downloaded database
-                    # 6.a. Check that the database exists and is not empty
-                    if os.path.exists(introspyDBName):
-                        if int(os.path.getsize(introspyDBName)) == 0:
-                            prettyPrint("The database generated by Introspy is empty. Skipping", "warning")
-                            subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                            #subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                            genyProcess.kill()
-                            continue
                     # Last line of defense
                     try:
-                        db = introspy.DBAnalyzer(introspyDBName, "foobar")
+                        prettyPrint("Analyzing the Introspy database file \"%s\"" % dbFile)
+                        db = introspy.DBAnalyzer(dbFile, "foobar")
                     except sqlite3.OperationalError as sql:
                         prettyPrint("The database generated by Introspy is probably empty. Skipping", "warning")
-                        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                        genyProcess.kill()
                         continue
                     except sqlite3.DatabaseError as sql:
                         prettyPrint("Database image is malformed. Skipping", "warning")
-                        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                        genyProcess.kill()
                         continue
 
                     jsonTrace = db.get_traced_calls_as_JSON()
 
-                    # 7. Write trace to malware/goodware dir
-                    # 7.a. Get a handle
-                    apkFileName = path[path.rfind("/")+1:].replace(".apk","")
-                    if APKType == "malware": 
-                         if path.find("training") != -1:
-                             jsonTraceFile = open("%s/%s_%s.json" % (arguments.malwaredir, apkFileName, arguments.vmname), "w")
+                    # Step 2. Write trace to malware/goodware dir
+                    # 2.a. Get a handle
+                    if dbFile.find("malware") != -1: 
+                         if dbFile.find("training") != -1:
+                             jsonTraceFile = open(dbFile.replace(".db", ".json"), "w")
                          else:
-                             jsonTraceFile = open("%s/%s_%s.json" % (arguments.malwaredirtest, apkFileName, arguments.vmname), "w")
+                             jsonTraceFile = open(dbFile.replace(".db", ".json"), "w")
                     else:
-                        if path.find("training") != -1:
-                            jsonTraceFile = open("%s/%s_%s.json" % (arguments.goodwaredir, apkFileName, arguments.vmname), "w")
+                        if dbFile.find("training") != -1:
+                            jsonTraceFile = open(dbFile.replace(".db", ".json"), "w")
                         else:
-                            jsonTraceFile = open("%s/%s_%s.json" % (arguments.goodwaredirtest, apkFileName, arguments.vmname), "w")
+                            jsonTraceFile = open(dbFile.replace(".db", ".json"), "w")
                     # 7.b. Write content
                     jsonTraceFile.write(jsonTrace)
                     jsonTraceFile.close()
 
                     # 7.c. Extract and save numerical features for SVM's and Trees
-                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(path), extractIntrospyFeatures(jsonTraceFile.name)
+                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(dbFile.replace(".db", ".apk")), extractIntrospyFeatures(jsonTraceFile.name)
                     if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
                     # Otherwise, store the features
                     features = staticFeatures + dynamicFeatures # TODO: Can static features help with the mediocre specificity scores?
-                    if APKType == "malware":
-                        if path.find("training") != -1:
-                            featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
+                    if dbFile.find("malware") != -1:
+                        if dbFile.find("training") != -1:
+                            featuresFile = open(dbFile.replace(".db", ".%s" % arguments.fileextension), "w")
                         else:
-                            featuresFile = open("%s/%s_%s.%s" % (arguments.malwaredirtest, apkFileName, arguments.vmname, arguments.fileextension), "w")
+                            featuresFile = open(dbFile.replace(".db", ".%s" % arguments.fileextension), "w")
                     else:
-                        if path.find("training") != -1:
-                            featuresFile = open("%s/%s_%s.%s" % (arguments.goodwaredir, apkFileName, arguments.vmname, arguments.fileextension), "w")
+                        if dbFile.find("training") != -1:
+                            featuresFile = open(dbFile.replace(".db", ".%s" % arguments.fileextension), "w")
                         else:
-                           featuresFile = open("%s/%s_%s.%s" % (arguments.goodwaredirtest, apkFileName, arguments.vmname, arguments.fileextension), "w")
+                           featuresFile = open(dbFile.replace(".db", ".%s" % arguments.fileextension), "w")
 
 
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
 
-                    prettyPrint("Done analyzing \"%s\"" % appComponents["package_name"])
+                    prettyPrint("Done analyzing \"%s\"" % dbFile)
                     
                     # Delete old introspy.db file
-                    os.remove(introspyDBName)
+                    os.remove(dbFile)
  
                     # Shutdown the genymotion machine
                     #subprocess.call(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
@@ -249,22 +214,10 @@ def main():
             allFeatureFilesTest = glob.glob("%s/*.%s" % (arguments.malwaredirtest, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
             allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
             allTraceFilesTest = glob.glob("%s/*.json" % arguments.malwaredirtest) + glob.glob("%s/*.json" % arguments.goodwaredirtest)
-                
+               
+            prettyPrint("Retrieved %s feature files (%s for testing) and %s trace files (%s for testing)" % (len(allFeatureFiles), len(allFeatureFilesTest), len(allTraceFiles), len(allTraceFilesTest)))
+ 
             metrics, metrics_test = {}, {}
-            #######################
-            # Hidden Markov Model #
-            #######################
-            #if arguments.algorithm == "hmm":
-            #    prettyPrint("Classifying using HMM and training with \"%s\" instances" % arguments.hmmtrainwith)
-
-                # Build X and y from "allTraces"
-            #    X = [t[0] for t in allTraces]
-            #    y = [t[1] for t in allTraces]
-
-                # Perform cross validation predicted
-            #    predicted = HMM.cross_val_predict(X, y, arguments.hmmtracelength, arguments.hmmthreshold, int(arguments.kfold), arguments.hmmtrainwith)
-                # Calculate the performance metrics
-            #    metrics = ScikitLearners.calculateMetrics(y, predicted)
             
             ###########################
             # Support Vector Machines #
@@ -381,22 +334,17 @@ def main():
             for index in range(len(y)):
                 if predicted[index] != y[index]:
                     if arguments.algorithm == "hmm":
-                        if allJSONFiles[index].find("malware") != -1:
-                            reanalyzeMalware.append(allJSONFiles[index].replace("_%s" % arguments.vmname, ""))
+                        if allTraceFiles[index].find("malware") != -1:
+                            reanalyzeMalware.append(allTraceFiles[index])
                         else:
-                            reanalyzeGoodware.append(allJSONFiles[index].replace("_%s" % arguments.vmname, ""))
-                        # Also delete the file
-                        # os.unlink(allJSONFiles[index])
+                            reanalyzeGoodware.append(allTraceFiles[index])
   
                     else:
                         # malware instances are in hashes whereas this appends their package names to the list. Update either!!
                         if allFeatureFiles[index].find("malware") != -1:
-                            reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk").replace("_%s" % arguments.vmname, ""))
+                            reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
                         else:
-                            reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk").replace("_%s" % arguments.vmname, ""))
-                        # Also delete the files (.json and .[fileextension])
-                        #os.unlink(allFeatureFiles[index])
-                        #os.unlink(allFeatureFiles[index].replace(".num", ".json")) 
+                            reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
 
             print reanalyzeGoodware
             print reanalyzeMalware

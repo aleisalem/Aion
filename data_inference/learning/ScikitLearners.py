@@ -175,7 +175,7 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, kfold=10):
         predicted, predicted_test = [-1] * len(y), []
         # Define classifier and cross validation iterator
         clf = svm.SVC(kernel=kernel, C=C)
-        kf = KFold(n_splits=10)
+        kf = KFold(n_splits=kfold)
         # Start the cross validation learning
         Xtest, ytest = numpy.array(Xtest), numpy.array(ytest)
         for training_indices, validation_indices in kf.split(X):
@@ -263,7 +263,7 @@ def predictAndTestKFoldTree(X, y, Xtest, ytest, criterion="gini", splitter="best
         predicted, predicted_test = [], []
         # Define classifier and cross validation iterator
         clf = tree.DecisionTreeClassifier(criterion=criterion, splitter=splitter, max_depth=maxdepth)
-        kf = KFold(n_splits=10)
+        kf = KFold(n_splits=kfold)
         # Start the cross validation learning
         Xtest, ytest = numpy.array(Xtest), numpy.array(ytest)
         for training_indices, validation_indices in kf.split(X):
