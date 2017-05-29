@@ -106,9 +106,15 @@ class DroidutanAnalysis(threading.Thread):
             # 5.a. Unleash Droidutan
             if not Droidutan.testApp(self.threadTarget, avdSerialno=avdIP, testDuration=int(self.threadDuration), useIntrospy=True, preExtractedComponents=appComponents, allowCrashes=True):
                 prettyPrint("An error occurred while testing the APK \"%s\". Skipping" % self.threadTarget, "warning")
-                return False
+                # 5.b. Download the introspy.db
+                prettyPrint("Downloading the Introspy database to \"%s\"" % introspyDBName)
+                subprocess.Popen(adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+                # 5.c. Uninstall the app
+                prettyPrint("Uninstalling \"%s\" from \"%s\"" % (appComponents["package_name"], adbID))
+                subprocess.Popen(appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
                 #subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
                 #genyProcess.kill()
+                return False
 
             # 5.b. Download the introspy.db
             prettyPrint("Downloading the Introspy database to \"%s\"" % introspyDBName)
