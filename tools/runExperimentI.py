@@ -88,7 +88,7 @@ def main():
 
                     # Ignore previously-analyzed APK's that are not in for re-analysis
                     if not reanalysis:
-                        if os.path.exists(currentAPK.replace(".apk", ".%s" % arguments.fileextension)):
+                        if os.path.exists(currentAPK.replace(".apk", ".db" % arguments.fileextension)):
                             # Second line of defense
                             if not currentAPK in reanalyzeMalware + reanalyzeGoodware:
                                 prettyPrint("APK \"%s\" has been analyzed before. Skipping" % currentAPK, "warning")
