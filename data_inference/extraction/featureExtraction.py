@@ -6,20 +6,43 @@ from Aion.utils.graphics import *
 from androguard.session import Session
 import numpy
 
-import os, json
+import os, json, threading
 
+def returnEmptyFeatures():
+    """
+    A dummy function used by timers to return empty feature vectors (lists)
+    """
+    prettyPrint("Analysis timeout. Returning empty feature vector", "warning")
+    return []
 
 def extractAndroguardFeatures(apkPath):
     """Extracts static numerical features from APK using Androguard"""
     try:
         features = []
+        if os.path.exists(apkPath.replace(".apk",".static")):
+            prettyPrint("Found a pre-computed static features file")
+            try:
+                content = open(apkPath.replace(".apk", ".static")).read()
+                features = [float(f) for f in content[1:-1].split(',')]
+                return features
+
+            except Exception as e:
+                prettyPrintError(e)
+                prettyPrint("Could not extract features from \".static\" file. Continuing as usual", "warning")
+        if verboseON():
+            prettyPrint("Starting analysis on \"%s\"" % apkPath, "debug")
         analysisSession = Session()
         if not os.path.exists(apkPath):
             prettyPrint("Could not find the APK file \"%s\"" % apkPath, "warning")
             return []
         # 1. Analyze APK and retrieve its components
+        #t = threading.Timer(300.0, returnEmptyFeatures) # Guarantees not being stuck on analyzing an APK
+        #t.start()
         analysisSession.add(apkPath, open(apkPath).read())
-        apk = analysisSession.analyzed_apk.values()[0]
+        if type(analysisSession.analyzed_apk.values()) == list:
+            apk = analysisSession.analyzed_apk.values()[0][0]
+        else:
+            apk = analysisSession.analyzed_apk.values()[0]
         dex = analysisSession.analyzed_dex.values()[0][0]
         vm = analysisSession.analyzed_dex.values()[0][1]
         # 2. Add features to the features vector
