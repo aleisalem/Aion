@@ -1,7 +1,13 @@
 #!/usr/bin/python
 
-import random, string, os, glob
+from Aion.utils.data import *
+
+import random, string, os, glob, subprocess, time
 from datetime import datetime
+
+
+def averageList(inputList, roundDigits=2):
+   return round(float(sum(inputList))/float(len(inputList)), roundDigits)
 
 def checkRoot():
     if os.getuid() != 0:
@@ -24,8 +30,47 @@ def getTimestamp(includeDate=False):
     else:
         return "[%s]"%str(datetime.now()).split(" ")[1]
 
-def averageList(inputList, roundDigits=2):
-   return round(float(sum(inputList))/float(len(inputList)), roundDigits)
+def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
+    """
+    Attempts to restore the snapshot of a VirtualBox machine
+    :param vmName: The name of the virtual machine
+    :type vmName: str
+    :param snapshotName: The name of the snapshot to restore
+    :type snapshotName: str
+    :param retrials: In case of failure, how many attempts to restore the snapshot are made
+    :type retrials: int
+    :param waitToBoot:The time (in seconds) to wait for a virtual machine to boot
+    :type waitToBoot: int
+    :return: A boolean depicting the success/failure of the operation
+    """
+    try:
+        # Define frequently-used commands
+        vBoxRestoreCmd = ["vboxmanage", "snapshot", vmName, "restore", snapshotName]
+        vBoxPowerOffCmd = ["vboxmanage", "controlvm", vmName, "poweroff"]
+        genymotionStartCmd = [getGenymotionPlayer(), "--vm-name", vmName]
+        genymotionPowerOffCmd = [getGenymotionPlayer(), "--poweroff", "--vm-name", vmName]
+        # Power off the genymotion AVD
+        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        # Attempt to restore the AVD's snapshot
+        result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        counter = 0
+        while result.lower().find("error") != -1:
+            print result
+            if counter == retrials:
+                return False
+            counter += 1
+            print "[*] Failed to restore snapshot. Retrying #%s" % counter
+            result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+            time.sleep(1)
+        # Power on the Genymotion AVD again
+        subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        time.sleep(waitToBoot)
+
+    except Exception as e:
+        print e
+        return False
+
+    return True
 
 # Copied from the "googleplay_api" helpers.py
 def sizeof_fmt(num):

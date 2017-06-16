@@ -345,12 +345,15 @@ def main():
                 # Classifying using K-nearest neighbors
                 K = [10, 25, 50, 100, 250, 500]
                 metricsDict, metrics_testDict = {}, {}
-                tmpPredicted, tmpPredicted_test = [0]*len(y), [0]*len(y)
+                tmpPredicted, tmpPredicted_test = [0]*len(y), [0]*len(ytest)
                 for k in K:
                     prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldKNN(X, y, Xtest, ytest, K=k, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
+                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldKNN(X, y, Xtest, ytest, K=k, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+                    #print predicted
+                    #print y
                     for i in range(len(predicted)):
                         tmpPredicted[i] += predicted[i]
+                    for i in range(len(predicted_test)):
                         tmpPredicted_test[i] += predicted_test[i]
                     metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
                     metricsDict["KNN%s" % k] = metrics
@@ -360,32 +363,47 @@ def main():
                 E = [10, 25, 50, 75, 100]
                 for e in E:
                     prettyPrint("Classifying using Random Forests with %s estimators" % e)
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldTree(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
+                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldTrees(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+                    #print predicted
+                    #print y
                     for i in range(len(predicted)):
                         tmpPredicted[i] += predicted[i]
+                    for i in range(len(predicted_test)):
                         tmpPredicted_test[i] += predicted_test[i]
                     metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
                     metricsDict["Trees%s" % e] = metrics
-                    metrics_testDir["Trees%s" % e] = metrics_test
+                    metrics_testDict["Trees%s" % e] = metrics_test
 
                 # Classifying using SVM
                 prettyPrint("Classifying using Support vector machines")
-                predicted, predicted_test = ScikitLearners.predictAndTestKFoldSVM(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
+                predicted, predicted_test = ScikitLearners.predictAndTestKFoldSVM(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+                #print predicted
+                #print y
                 for i in range(len(predicted)):
                     tmpPredicted[i] += predicted[i]
+                for i in range(len(predicted_test)):
                     tmpPredicted_test[i] += predicted_test[i]
                 metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
                 metricsDict["svm"] = metrics
                 metrics_testDict["svm"] = metrics_test
                 
                 # Average the predictions in tempPredicted and tempPredicted_test
-                predicted, predicted_test = [-1]*len(y), [-1]*len(y)
+                predicted, predicted_test = [-1]*len(y), [-1]*len(ytest)
                 for i in range(len(tmpPredicted)):
-                    predicted[i] = 1 if tmpPredicted[i]/12 >= 6 else 0 # 12 classifiers
-                    predicted_test[i] = 1 if tmpPredicted_test[i] / 12 >=6 else 0 # 12 classifiers
+                    predicted[i] = 1 if tmpPredicted[i] >= 12.0/2.0 else 0 # 12 classifiers
+                for i in range(len(tmpPredicted_test)):
+                    predicted_test[i] = 1 if tmpPredicted_test[i] >= 12.0/2.0 else 0 # 12 classifiers
 
-                metricsDict["all"] = calculateMetrics(predicted, y)
-                metrics_testDict["all"] = calculateMetrics(predicted_test, ytest)
+                #print tmpPredicted
+                #print y
+                #print predicted
+
+                #print tmpPredicted_test
+                #print ytest
+                #print predicted_test
+
+                metricsDict["all"] = ScikitLearners.calculateMetrics(predicted, y)
+                metrics_testDict["all"] = ScikitLearners.calculateMetrics(predicted_test, ytest)
         
                 metrics, metrics_test = metricsDict["all"], metrics_testDict["all"] # Used to decide upon whether to iterate more
       
@@ -410,9 +428,9 @@ def main():
                     tstamp = int(time.time())
                     outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % tstamp
                     f = open(outfile, "a")
-                    f.write("-----------------------------------------------\n")
-                    f.write("| Metrics: iteration %s, timestamp: %s |\n" % (iteration-1, getTimestamp()))
-                    f.write("-----------------------------------------------\n")
+                    f.write("############################################################################\n")
+                    f.write("# Metrics: algorithm: %s, iteration %s, timestamp: %s #\n" % (m, iteration-1, getTimestamp()))
+                    f.write("############################################################################\n")
                     f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metricsDict[m]["accuracy"], metricsDict[m]["recall"], metricsDict[m]["specificity"], metricsDict[m]["precision"], metricsDict[m]["f1score"]))
                     f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics_testDict[m]["accuracy"], metrics_testDict[m]["recall"], metrics_testDict[m]["specificity"], metrics_testDict[m]["precision"], metrics_testDict[m]["f1score"])) 
                     f.close()
@@ -473,6 +491,19 @@ def main():
             currentMetrics = metrics
 
             # TODO: Restore snapshots of all VMs
+            vms, snaps = arguments.vmnames.split(','), arguments.vmsnapshots.split(',')
+            if len(vms) > len(snaps):
+                r = range(len(snaps))
+            elif len(vms) < len(snaps):
+                r = range(len(vms))
+            else:
+                r = range(len(vms)) # Or of snaps doesn't matter
+            for i in r:
+                  prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snaps[i], vms[i]))
+                  if restoreVirtualBoxSnapshot(vms[i], snaps[i]):
+                      prettyPrint("Successfully restored AVD")
+                  else:
+                      prettyPrint("An error occurred while restoring the AVD")
             
         # Final Results
         prettyPrint("Training results after %s iterations" % iteration, "output")
