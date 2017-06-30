@@ -1,12 +1,13 @@
 #!/usr/bin/python
 
+from Aion.shared.constants import *
 from Aion.utils.data import *
 from Aion.utils.graphics import *
 
 from androguard.session import Session
 import numpy
 
-import os, json, threading
+import os, json, threading, re
 
 def returnEmptyFeatures():
     """
@@ -15,7 +16,7 @@ def returnEmptyFeatures():
     prettyPrint("Analysis timeout. Returning empty feature vector", "warning")
     return []
 
-def extractAndroguardFeatures(apkPath):
+def extractStaticFeatures(apkPath):
     """Extracts static numerical features from APK using Androguard"""
     try:
         features = []
@@ -23,8 +24,11 @@ def extractAndroguardFeatures(apkPath):
             prettyPrint("Found a pre-computed static features file")
             try:
                 content = open(apkPath.replace(".apk", ".static")).read()
-                features = [float(f) for f in content[1:-1].split(',')]
-                return features
+                if len(content) > 0:
+                    features = [float(f) for f in content[1:-1].split(',') if len(f) > 0]
+                    return features
+                else:
+                    prettyPrint("File is empty. Continuing as usual", "warning")
 
             except Exception as e:
                 prettyPrintError(e)
@@ -46,40 +50,62 @@ def extractAndroguardFeatures(apkPath):
         dex = analysisSession.analyzed_dex.values()[0][0]
         vm = analysisSession.analyzed_dex.values()[0][1]
         # 2. Add features to the features vector
+        basicFeatures, permissionFeatures, apiCallFeatures, allFeatures = [], [], [], []
         # 2.a. The APK-related features
+        if verboseON():
+            prettyPrint("Extracting basic features", "debug")
         minSDKVersion = 0.0 if not apk.get_min_sdk_version() else float(apk.get_min_sdk_version())
         maxSDKVersion = 0.0 if not apk.get_max_sdk_version() else float(apk.get_max_sdk_version())
-        features.append(minSDKVersion)
-        features.append(maxSDKVersion)
-        features.append(float(len(apk.get_activities()))) # No. of activities
-        features.append(float(len(apk.get_services()))) # No. of services
-        features.append(float(len(apk.get_receivers()))) # No. of broadcast receivers
-        features.append(float(len(apk.get_providers()))) # No. of providers
-        aospPermissions = float(len(apk.get_requested_aosp_permissions())) # AOSP permissions
-        thirdPartyPermissions = float(len(apk.get_requested_third_party_permissions())) # Third-party permissions
-        totalPermissions = aospPermissions + thirdPartyPermissions
-        dangerousPermissions = 0.0
-        for p in apk.get_details_permissions():
-            if apk.get_details_permissions()[p][0] == "dangerous":
-                dangerousPermissions += 1.0 
-        features.append(totalPermissions) # No. of permissions
+        basicFeatures.append(minSDKVersion)
+        basicFeatures.append(maxSDKVersion)
+        basicFeatures.append(float(len(apk.get_activities()))) # No. of activities
+        basicFeatures.append(float(len(apk.get_services()))) # No. of services
+        basicFeatures.append(float(len(apk.get_receivers()))) # No. of broadcast receivers
+        basicFeatures.append(float(len(apk.get_providers()))) # No. of providers
+        # 2.b. Harvest permission-related features
+        if verboseON():
+            prettyPrint("Extracting permissions-related features", "debug")
+        aospPermissions = float(len(apk.get_requested_aosp_permissions())) # Android permissions requested by the app
+        declaredPermissions = float(len(apk.get_declared_permissions())) # Custom permissions declared by the app
+        dangerousPermissions = float(len([p for p in apk.get_requested_aosp_permissions_details().values() if p["protectionLevel"] == "dangerous"]))
+        totalPermissions = float(len(apk.get_permissions()))
+        permissionFeatures.append(totalPermissions) # No. of permissions
         if totalPermissions > 0:
-            features.append(aospPermissions/totalPermissions) # AOSP permissions : Total permissions
-            features.append(thirdPartyPermissions/totalPermissions) # Third-party permissions : Total permissions
-            features.append(dangerousPermissions/totalPermissions) # Dangerous permissions : Total permissions
+            permissionFeatures.append(aospPermissions/totalPermissions) # AOSP permissions : Total permissions
+            permissionFeatures.append(declaredPermissions/totalPermissions) # Third-party permissions : Total permissions
+            permissionFeatures.append(dangerousPermissions/totalPermissions) # Dangerous permissions : Total permissions
         else:
-            features.append(0)
-            features.append(0)
-            features.append(0)
-        # 2.b. The DEX-related features
-        features.append(float(len(dex.get_classes()))) # Total number of classes
-        features.append(float(len(dex.get_strings()))) # Total number of strings
+            permissionFeatures.append(0.0)
+            permissionFeatures.append(0.0)
+            permissionFeatures.append(0.0)
+        # 2.c. The DEX-related features (API calls)
+        if verboseON():
+            prettyPrint("Extracting API calls from dex code", "debug")
+        apiCallFeatures.append(float(len(dex.get_classes()))) # Total number of classes
+        apiCallFeatures.append(float(len(dex.get_strings()))) # Total number of strings
+        apiCategories = sensitiveAPICalls.keys()
+        apiCategoryCount = [0.0] * len(apiCategories)
+        for c in dex.classes.get_names():
+            currentClass = dex.get_class(c)
+            if not currentClass:
+                continue
+            code = currentClass.get_source()
+            if len(code) < 1:
+                continue
+            for category in apiCategories:
+                if code.find(category) != -1:
+                    for call in sensitiveAPICalls[category]:
+                        apiCategoryCount[apiCategories.index(category)] += float(len(re.findall(call, code)))
+
+        apiCallFeatures = apiCategoryCount
 
     except Exception as e:
         prettyPrintError(e)
-        return []
+        return [], [], [], []
     
-    return features     
+    allFeatures = basicFeatures + permissionFeatures + apiCallFeatures
+
+    return basicFeatures, permissionFeatures, apiCallFeatures, allFeatures
 
 
 def extractIntrospyFeatures(apkJSONPath):

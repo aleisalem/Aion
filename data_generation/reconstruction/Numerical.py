@@ -12,11 +12,8 @@ def loadNumericalFeatures(featuresFile, delimiter=","):
         if not os.path.exists(featuresFile):
             prettyPrint("Unable to find the features file \"%s\"" % featuresFile, "warning")
             return []
-        content = open(featuresFile).read().split(delimiter)
-        features = []
-        for f in content:
-            if f != "":
-                features.append(float(f))
+        content = open(featuresFile).read()
+        features = [float(f) for f in content[1:-1].split(delimiter)]
 
     except Exception as e:
         prettyPrintError(e)

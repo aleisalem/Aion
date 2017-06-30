@@ -114,6 +114,13 @@ def main():
                                      prettyPrint("Process \"%s\" is dead. A new AVD is available for analysis" % p.name, "debug")
                                 availableVMs.append(p.name)
                                 currentProcesses.remove(p)
+                                # Also restore clean state of machine 
+                                if len(allAPKs) % 10 == 0:
+                                    vm = p.name
+                                    snapshot = allSnapshots[allVMs.index(vm)]
+                                    prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
+                                    restoreVirtualBoxSnapshot(vm, snapshot)
+                                          
 
                         print [p.name for p in currentProcesses]
                         print [p.is_alive() for p in currentProcesses]
@@ -194,7 +201,8 @@ def main():
 
                     # 7.c. Extract and save numerical features for SVM's and Trees
                     prettyPrint("Extracting hybrid features from APK")
-                    staticFeatures, dynamicFeatures = extractAndroguardFeatures(dbFile.replace(".db", ".apk")), extractIntrospyFeatures(jsonTraceFile.name)
+                    sfBasic, sfPermissions, sfAPI, staticFeatures = extractStaticFeatures(dbFile.replace(".db", ".apk"))
+                    dynamicFeatures = extractIntrospyFeatures(jsonTraceFile.name)
                     if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
