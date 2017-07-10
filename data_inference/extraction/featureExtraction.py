@@ -19,16 +19,19 @@ def returnEmptyFeatures():
 def extractStaticFeatures(apkPath):
     """Extracts static numerical features from APK using Androguard"""
     try:
-        features = []
+        features = [[], [], [], []] # Tuples are immutable
         if os.path.exists(apkPath.replace(".apk",".static")):
             prettyPrint("Found a pre-computed static features file")
+            bFeatures, pFeatures, aFeatures, allFeatures = [], [], [], []
             try:
-                content = open(apkPath.replace(".apk", ".static")).read()
-                if len(content) > 0:
-                    features = [float(f) for f in content[1:-1].split(',') if len(f) > 0]
-                    return features
-                else:
-                    prettyPrint("File is empty. Continuing as usual", "warning")
+                possibleExtensions = [".basic", ".perm", ".api", ".static"]
+                for ext in possibleExtensions:
+                    if os.path.exists(apkPath.replace(".apk", ext)):
+                        content = open(apkPath.replace(".apk", ext)).read()
+                        if len(content) > 0:
+                            features[possibleExtensions.index(ext)] = [float(f) for f in content[1:-1].split(',') if len(f) > 0]
+
+                return tuple(features)
 
             except Exception as e:
                 prettyPrintError(e)
@@ -38,7 +41,7 @@ def extractStaticFeatures(apkPath):
         analysisSession = Session()
         if not os.path.exists(apkPath):
             prettyPrint("Could not find the APK file \"%s\"" % apkPath, "warning")
-            return []
+            return [], [], [], []
         # 1. Analyze APK and retrieve its components
         #t = threading.Timer(300.0, returnEmptyFeatures) # Guarantees not being stuck on analyzing an APK
         #t.start()

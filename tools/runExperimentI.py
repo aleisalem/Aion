@@ -22,8 +22,6 @@ def defineArguments():
     parser = argparse.ArgumentParser(prog="runExperimentI.py", description="A tool to implement the stimulation-detection feedback loop using Garfield as stimulation engine.")
     parser.add_argument("-x", "--malwaredir", help="The directory containing the malicious APK's to analyze and use as training/validation dataset", required=True)
     parser.add_argument("-g", "--goodwaredir", help="The directory containing the benign APK's to analyze and use as training/validation dataset", required=True)
-    parser.add_argument("-m", "--malwaredirtest", help="The directory containing the malicious APK's to analyze and use as test dataset", required=True)
-    parser.add_argument("-b", "--goodwaredirtest", help="The directory containing the benign APK's to analyze and use as test dataset .", required=True)  
     parser.add_argument("-f", "--analyzeapks", help="Whether to perform analysis on the retrieved APK's", required=False, default="no", choices=["yes", "no"])
     parser.add_argument("-t", "--analysistime", help="How long to run monkeyrunner (in seconds)", required=False, default=60)
     parser.add_argument("-v", "--vmnames", help="The name(s) of the Genymotion machine(s) to use for analysis (comma-separated)", required=False, default="")
@@ -63,13 +61,13 @@ def main():
             iteration += 1
             if arguments.analyzeapks == "yes":
                 # Retrieve malware APK's
-                malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir) + glob.glob("%s/*.apk" % arguments.malwaredirtest)
+                malAPKs = reanalyzeMalware if reanalysis else glob.glob("%s/*.apk" % arguments.malwaredir)
                 if len(malAPKs) < 1:
                     prettyPrint("Could not find any malicious APK's" , "warning")
                 else:
                     prettyPrint("Successfully retrieved %s malicious instances" % len(malAPKs))
                 # Retrieve goodware APK's
-                goodAPKs = reanalyzeGoodware if reanalysis else glob.glob("%s/*.apk" % arguments.goodwaredir) + glob.glob("%s/*.apk" % arguments.goodwaredirtest)
+                goodAPKs = reanalyzeGoodware if reanalysis else glob.glob("%s/*.apk" % arguments.goodwaredir)
                 if len(goodAPKs) < 1:
                     prettyPrint("Could not find any benign APK's", "warning")
                 else:
@@ -121,7 +119,6 @@ def main():
                                     prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
                                     restoreVirtualBoxSnapshot(vm, snapshot)
                                           
-
                         print [p.name for p in currentProcesses]
                         print [p.is_alive() for p in currentProcesses]
 
@@ -158,8 +155,6 @@ def main():
                 # Step 0. Retrieve all introspy database files
                 allDBFiles = glob.glob("%s/*.db" % arguments.malwaredir)
                 allDBFiles += glob.glob("%s/*.db" % arguments.goodwaredir)
-                allDBFiles += glob.glob("%s/*.db" % arguments.malwaredirtest)
-                allDBFiles += glob.glob("%s/*.db" % arguments.goodwaredirtest)
                 if len(allDBFiles) < 1:
                     prettyPrint("Could not retrieve an database files to analyze. Exiting", "warning")
 
@@ -238,13 +233,11 @@ def main():
             ####################################################################
             # Load numerical features
             allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
-            allFeatureFilesTest = glob.glob("%s/*.%s" % (arguments.malwaredirtest, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
             allTraceFiles = glob.glob("%s/*.json" % arguments.malwaredir) + glob.glob("%s/*.json" % arguments.goodwaredir)
-            allTraceFilesTest = glob.glob("%s/*.json" % arguments.malwaredirtest) + glob.glob("%s/*.json" % arguments.goodwaredirtest)
                
-            prettyPrint("Retrieved %s feature files (%s for testing) and %s trace files (%s for testing)" % (len(allFeatureFiles), len(allFeatureFilesTest), len(allTraceFiles), len(allTraceFilesTest)))
+            prettyPrint("Retrieved %s feature files and %s trace files" % (len(allFeatureFiles), len(allTraceFiles)))
  
-            metrics, metrics_test = {}, {}
+            metrics = {}
             
             ###########################
             # Support Vector Machines #
@@ -252,7 +245,6 @@ def main():
             if arguments.algorithm == "svm":
                 prettyPrint("Classifying using Support Vector Machines")
                 X, y = [], []
-                Xtest, ytest = [], []
                 if arguments.svmusessk == "yes":
                     prettyPrint("Using the String Subsequence Kernel (SSK)")
                     # Loading training feature vectors
@@ -263,49 +255,29 @@ def main():
                             y.append(1)
                         else:
                             y.append(0)
-                    # Loading test feature vectors
-                    for f in allTraceFilesTest:
-                        Xtest.append(introspyJSONToTrace(f))
-                        # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                        if f.find("malware") != -1:
-                            ytest.append(1)
-                        else:
-                            ytest.append(0)
-                        
                      
-                    predicted, predicted_test = ScikitLearners.predictedAndTestKFoldSVMSSK(X, y, Xtest, ytest, kfold=int(arguments.kfold), subseqLength=int(arguments.svmsubsequence), selectKBest=int(arguments.selectKBest))
+                    predicted = ScikitLearners.predictedKFoldSVMSSK(X, y, kfold=int(arguments.kfold), subseqLength=int(arguments.svmsubsequence), selectKBest=int(arguments.selectKBest))
 
                 else:
                     # Loading training feature vectors
                     for f in allFeatureFiles:
-                         X.append(Numerical.loadNumericalFeatures(f))
-                         # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                         if f.find("malware") != -1:
-                             y.append(1)
-                         else:
-                             y.append(0)
-
-                    # Loading test feature vectors
-                    for f in allFeatureFilesTest:
-                        Xtest.append(Numerical.loadNumericalFeatures(f))
+                        X.append(Numerical.loadNumericalFeatures(f))
                         # TODO: Assumes the word "malware" is in the file path/name. Fix that.
                         if f.find("malware") != -1:
-                            ytest.append(1)
+                            y.append(1)
                         else:
-                            ytest.append(0)                        
+                            y.append(0)
 
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldSVM(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
+                    predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
 
-                metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
 
             ##################
             # Decision Trees #
             ##################
             elif arguments.algorithm == "tree":
                 prettyPrint("Classifying using Decision Trees")
-
                 X, y = [], []
-                Xtest, ytest = [], []
                 # Loading training feature vectors
                 for f in allFeatureFiles:
                     X.append(Numerical.loadNumericalFeatures(f))
@@ -314,17 +286,9 @@ def main():
                         y.append(1)
                     else:
                         y.append(0)
-                # Loading test feature vectors
-                for f in allFeatureFilesTest:
-                    Xtest.append(Numerical.loadNumericalFeatures(f))
-                    # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                    if f.find("malware") != -1:
-                        ytest.append(1)
-                    else:
-                        ytest.append(0)
 
-                predicted, predicted_test = ScikitLearners.predictAndTestKFoldTrees(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
-                metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+                predicted = ScikitLearners.predictKFoldTrees(X, y, kfold=int(arguments.kfold), selectKBest=int(arguments.selectKBest))
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
 
             ####################################
             # Ensemble of learning algorithms #
@@ -332,7 +296,6 @@ def main():
             elif arguments.algorithm == "ensemble":
                 prettyPrint("Ensemble mode classification: K-NN, SVM, and Random Forests")
                 X, y = [], []
-                Xtest, ytest = [], []
                 # Loading training feature vectors
                 for f in allFeatureFiles:
                     X.append(Numerical.loadNumericalFeatures(f))
@@ -341,79 +304,50 @@ def main():
                         y.append(1)
                     else:
                         y.append(0)
-                # Loading test feature vectors
-                for f in allFeatureFilesTest:
-                    Xtest.append(Numerical.loadNumericalFeatures(f))
-                    # TODO: Assumes the word "malware" is in the file path/name. Fix that.
-                    if f.find("malware") != -1:
-                        ytest.append(1)
-                    else:
-                        ytest.append(0)
 
                 # Classifying using K-nearest neighbors
                 K = [10, 25, 50, 100, 250, 500]
-                metricsDict, metrics_testDict = {}, {}
-                tmpPredicted, tmpPredicted_test = [0]*len(y), [0]*len(ytest)
+                metricsDict = {}
+                tmpPredicted = [0]*len(y)
                 for k in K:
                     prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldKNN(X, y, Xtest, ytest, K=k, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
-                    #print predicted
-                    #print y
+                    predicted = ScikitLearners.predictKFoldKNN(X, y, K=k, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+
                     for i in range(len(predicted)):
                         tmpPredicted[i] += predicted[i]
-                    for i in range(len(predicted_test)):
-                        tmpPredicted_test[i] += predicted_test[i]
-                    metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+
+                    metrics = ScikitLearners.calculateMetrics(y, predicted)
                     metricsDict["KNN%s" % k] = metrics
-                    metrics_testDict["KNN%s" % k] = metrics_test
 
                 # Classifying using Random Forests
                 E = [10, 25, 50, 75, 100]
                 for e in E:
                     prettyPrint("Classifying using Random Forests with %s estimators" % e)
-                    predicted, predicted_test = ScikitLearners.predictAndTestKFoldTrees(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
-                    #print predicted
-                    #print y
+                    predicted = ScikitLearners.predictKFoldTrees(X, y, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+
                     for i in range(len(predicted)):
                         tmpPredicted[i] += predicted[i]
-                    for i in range(len(predicted_test)):
-                        tmpPredicted_test[i] += predicted_test[i]
-                    metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+
+                    metrics = ScikitLearners.calculateMetrics(y, predicted)
                     metricsDict["Trees%s" % e] = metrics
-                    metrics_testDict["Trees%s" % e] = metrics_test
 
                 # Classifying using SVM
                 prettyPrint("Classifying using Support vector machines")
-                predicted, predicted_test = ScikitLearners.predictAndTestKFoldSVM(X, y, Xtest, ytest, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
-                #print predicted
-                #print y
+                predicted = ScikitLearners.predictKFoldSVM(X, y, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+
                 for i in range(len(predicted)):
                     tmpPredicted[i] += predicted[i]
-                for i in range(len(predicted_test)):
-                    tmpPredicted_test[i] += predicted_test[i]
-                metrics, metrics_test = ScikitLearners.calculateMetrics(y, predicted), ScikitLearners.calculateMetrics(ytest, predicted_test)
+
+                metrics = ScikitLearners.calculateMetrics(y, predicted)
                 metricsDict["svm"] = metrics
-                metrics_testDict["svm"] = metrics_test
                 
-                # Average the predictions in tempPredicted and tempPredicted_test
-                predicted, predicted_test = [-1]*len(y), [-1]*len(ytest)
+                # Average the predictions in tempPredicted
+                predicted = [-1]*len(y)
                 for i in range(len(tmpPredicted)):
                     predicted[i] = 1 if tmpPredicted[i] >= 12.0/2.0 else 0 # 12 classifiers
-                for i in range(len(tmpPredicted_test)):
-                    predicted_test[i] = 1 if tmpPredicted_test[i] >= 12.0/2.0 else 0 # 12 classifiers
-
-                #print tmpPredicted
-                #print y
-                #print predicted
-
-                #print tmpPredicted_test
-                #print ytest
-                #print predicted_test
 
                 metricsDict["all"] = ScikitLearners.calculateMetrics(predicted, y)
-                metrics_testDict["all"] = ScikitLearners.calculateMetrics(predicted_test, ytest)
-        
-                metrics, metrics_test = metricsDict["all"], metrics_testDict["all"] # Used to decide upon whether to iterate more
+                metrics = metricsDict["all"] # Used to decide upon whether to iterate more
       
             # Print and save results
             if arguments.algorithm == "ensemble":
@@ -425,13 +359,6 @@ def main():
                     prettyPrint("Specificity: %s" % str(metricsDict[m]["specificity"]), "output")
                     prettyPrint("Precision: %s" % str(metricsDict[m]["precision"]), "output")
                     prettyPrint("F1 Score: %s" %  str(metricsDict[m]["f1score"]), "output")
-                    # The average metrics for test dataset
-                    prettyPrint("Metrics for test dataaset using %s-fold cross validation and %s" % (arguments.kfold, m), "output")
-                    prettyPrint("Accuracy: %s" % str(metrics_testDict[m]["accuracy"]), "output")
-                    prettyPrint("Recall: %s" % str(metrics_testDict[m]["recall"]), "output")
-                    prettyPrint("Specificity: %s" % str(metrics_testDict[m]["specificity"]), "output")
-                    prettyPrint("Precision: %s" % str(metrics_testDict[m]["precision"]), "output")
-                    prettyPrint("F1 Score: %s" %  str(metrics_testDict[m]["f1score"]), "output")
                     # Log results to the outfile
                     tstamp = int(time.time())
                     outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % tstamp
@@ -440,14 +367,13 @@ def main():
                     f.write("# Metrics: algorithm: %s, iteration %s, timestamp: %s #\n" % (m, iteration-1, getTimestamp()))
                     f.write("############################################################################\n")
                     f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metricsDict[m]["accuracy"], metricsDict[m]["recall"], metricsDict[m]["specificity"], metricsDict[m]["precision"], metricsDict[m]["f1score"]))
-                    f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics_testDict[m]["accuracy"], metrics_testDict[m]["recall"], metrics_testDict[m]["specificity"], metrics_testDict[m]["precision"], metrics_testDict[m]["f1score"])) 
                     f.close()
 
             else:
                 # Make sure the metrics are not empty
-                if len(metrics) < 5 or len(metrics_test) < 5:
+                if len(metrics) < 5:
                     prettyPrint("FATAL: The recorded metrics are not complete. Exiting", "error")
-                    print metrics, metrics_test
+                    print metrics
                     return False
 
                 # The average metrics for training dataset
@@ -457,13 +383,6 @@ def main():
                 prettyPrint("Specificity: %s" % str(metrics["specificity"]), "output")
                 prettyPrint("Precision: %s" % str(metrics["precision"]), "output")
                 prettyPrint("F1 Score: %s" %  str(metrics["f1score"]), "output")
-                # The average metrics for test dataset
-                prettyPrint("Metrics for test dataaset using %s-fold cross validation and %s" % (arguments.kfold, arguments.algorithm), "output")
-                prettyPrint("Accuracy: %s" % str(metrics_test["accuracy"]), "output")
-                prettyPrint("Recall: %s" % str(metrics_test["recall"]), "output")
-                prettyPrint("Specificity: %s" % str(metrics_test["specificity"]), "output")
-                prettyPrint("Precision: %s" % str(metrics_test["precision"]), "output")
-                prettyPrint("F1 Score: %s" %  str(metrics_test["f1score"]), "output")
                 # Log results to the outfile
                 outfile = arguments.outfile if arguments.outfile != "" else "./aion_%s.log" % arguments.vmname
                 f = open(outfile, "a")
@@ -471,7 +390,6 @@ def main():
                 f.write("| Metrics: iteration %s, timestamp: %s |\n" % (iteration-1, getTimestamp()))
                 f.write("-----------------------------------------------\n")
                 f.write("Validation - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics["accuracy"], metrics["recall"], metrics["specificity"], metrics["precision"], metrics["f1score"]))
-                f.write("Test - accuracy: %s, recall: %s, specificity: %s, precision: %s, F1-score: %s\n" % (metrics_test["accuracy"], metrics_test["recall"], metrics_test["specificity"], metrics_test["precision"], metrics_test["f1score"])) 
                 f.close()
 
             # Save incorrectly-classified training instances for re-analysis
