@@ -323,7 +323,7 @@ def main():
                 E = [10, 25, 50, 75, 100]
                 for e in E:
                     prettyPrint("Classifying using Random Forests with %s estimators" % e)
-                    predicted = ScikitLearners.predictKFoldTrees(X, y, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
+                    predicted = ScikitLearners.predictKFoldTrees(X, y, estimators=e, kfold=int(arguments.kfold), selectKBest=int(arguments.selectkbest))
 
                     for i in range(len(predicted)):
                         tmpPredicted[i] += predicted[i]

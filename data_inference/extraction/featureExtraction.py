@@ -100,7 +100,7 @@ def extractStaticFeatures(apkPath):
                     for call in sensitiveAPICalls[category]:
                         apiCategoryCount[apiCategories.index(category)] += float(len(re.findall(call, code)))
 
-        apiCallFeatures = apiCategoryCount
+        apiCallFeatures += apiCategoryCount
 
     except Exception as e:
         prettyPrintError(e)
