@@ -12,7 +12,7 @@ import plotly.plotly as py
 from plotly.offline import plot, iplot
 from plotly.graph_objs import *
 
-def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800), figTitle="Visualization using tSNE", saveProjectedData=False):
+def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(1024,1024), figTitle="Data visualization", appNames=[], saveProjectedData=False):
     """
     Generates a scatter plot using "plotly" after projecting the data points into <dim>-dimensionality using tSNE or PCA
     :param X: The matrix containing the feature vectors
@@ -27,6 +27,8 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
     :type figSize: tuple (of ints)
     :param figTitle: The title of the figure and the name of the resulting HTML file
     :type figTitle: str
+    :param appNames: The names of apps to be used as tooltips for each data point. Assumed to match one-to-one with the feature vectors in X
+    :type appNames: list of str
     :param saveProjectedData: Whether to save the projected data in a CSV file
     :type saveProjectedData: bool
     :return: A bool depicting the success/failure of the operaiton
@@ -42,6 +44,7 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
         # Generate a scatter plot
         prettyPrint("Populating the traces for malware and goodware")
         x_mal, y_mal, x_good, y_good = [], [], [], []
+        labels_mal, labels_good = [], []
         if dim == 3:
             z_mal, z_good = [], []
         for index in range(len(y)):
@@ -50,11 +53,13 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
                 y_mal.append(X_new[index][1])
                 if dim == 3:
                     z_mal.append(X_new[index][2])
+                labels_mal.append(appNames[index])
             else:
                 x_good.append(X_new[index][0])
                 y_good.append(X_new[index][1])
                 if dim == 3:
                     z_good.append(X_new[index][2])
+                labels_good.append(appNames[index])
 
         # Create traces for the scatter plot 
         prettyPrint("Creating a scatter plot")
@@ -70,7 +75,8 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
                              opacity=0.75,
                              line=Line(width=2.0)
                              ),
-               hoverinfo='none'
+               hoverinfo='text',
+               text=labels_mal
                )
             # The trace for goodware    
             trace_goodware = Scatter(x=x_good,
@@ -83,7 +89,8 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
                               opacity=0.75,
                               line=Line(width=2.0)
                               ),
-                hoverinfo='none'
+                hoverinfo='text',
+                text=labels_good
                 )
         elif dim == 3:
             # The trace for malware
@@ -98,6 +105,8 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
                               opacity=0.5,
                               line=Line(width=1.0)
                               ),
+                hoverinfo='text',
+                text=labels_mal
                 )
             # The trace for goodware    
             trace_goodware = Scatter3d(x=x_good,
@@ -111,6 +120,8 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
                               opacity=0.5,
                               line=Line(width=1.0)
                               ),
+                hoverinfo='text',
+                text=labels_good
                 )
         # Define the axis properties
         axis=dict(showbackground=False,
@@ -138,6 +149,7 @@ def reduceAndVisualize(X, y, dim=2, reductionAlgorithm="tnse", figSize=(800,800)
             hovermode='closest',
             annotations=Annotations([
                 Annotation(
+                showarrow=False,
                 text=figTitle,
                 xref='paper',
                 yref='paper',
