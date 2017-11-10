@@ -12,7 +12,7 @@ from Aion.shared.DroidutanTest import * # The Droidutan-drive test thread
 
 from sklearn.metrics import *
 import numpy, ghmm
-import introspy # Used for analysis of introspy generated databases
+import introspy, hashlib # Used for analysis of introspy generated databases
 from droidutan import Droidutan
 
 import os, sys, glob, shutil, argparse, subprocess, sqlite3, time, threading, pickledb, random
@@ -58,10 +58,11 @@ def main():
         # Initialize and populate database
         hashesDB = pickledb.load(getHashesDBPath(), True)
         aionDB = AionDB(int(arguments.runnumber), arguments.datasetname)
-        algorithms = aionDB.select("learner", [])
+        algorithms = aionDB.select([], "learner", [])
         learners = {}
-        for a in algorithms:
-            learners[algorithms[a]] = str(a)
+        for a in algorithms.fetchall():
+            if len(a) > 1:
+                learners[a[1].lower()] = str(a[0])
 
         # Load APK's and split into training and test datasets
         prettyPrint("Loading APK's from \"%s\" and \"%s\"" % (arguments.malwaredir, arguments.goodwaredir))
@@ -98,15 +99,15 @@ def main():
             reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             # Update the iteration number
-            aionDB.update("run", ["runIterations", str(iteration)], [("runID", arguments.runnumber)]) # UPDATE run SET runIterations=X WHERE runID=[runnumber]
-            iteration += 1
+            aionDB.update("run", [("runIterations", str(iteration))], [("runID", arguments.runnumber)]) # UPDATE run SET runIterations=X WHERE runID=[runnumber]
             if arguments.analyzeapks == "yes":
-                allAPKs = malTraining + goodTraining if not reanalysis else reanalyzeMalware + reanalyzeGoodware
+                allAPKs = malTraining + goodTraining + malTest + goodTest if not reanalysis else reanalyzeMalware + reanalyzeGoodware
                 ########################
                 ## Main Analysis Loop ##
                 ########################
                 currentProcesses = []
                 while len(allAPKs) > 0:
+                    prettyPrint("Starting analysis phase")
                     # Step 1. Pop an APK from "allAPKs" (Defaut: last element)
                     currentAPK = allAPKs.pop()
                     # Update the number of times an app has been stimulated
@@ -122,13 +123,13 @@ def main():
                     # Update the database
                     # Does it already exist in the database
                     results = aionDB.select([], "app", [("appName", appName), ("appRunID", arguments.runnumber)])
-                    if results == None:
-                        aionDB.insert("app", [("appName", appName), ("appRunID", arguments.runnumber), ("appRuns", 1)])
+                    rows = results.fetchall()
+                    if len(rows) <= 0:
+                        appType = "malware" if currentAPK.lower().find("malware") != -1 else "goodware"
+                        aionDB.insert("app", ["appName", "appType", "appRunID", "appRuns"], [appName, appType, arguments.runnumber,1])
                     else:
-                        rows = results.fetchall()
                         currentRuns = int(rows[0][3])
                         aionDB.update("app", [("appRuns", currentRuns+1)], [("appName", appName)])                                                                    
-                    
                     # Step 2. Check availability of VMs for test
                     while len(availableVMs) < 1:
                         prettyPrint("No AVD's available for analysis. Sleeping for 10 seconds")
@@ -144,7 +145,7 @@ def main():
                                 availableVMs.append(p.name)
                                 currentProcesses.remove(p)
                                 # Also restore clean state of machine 
-                                if len(allAPKs) % 10 == 0:
+                                if len(allAPKs) % 25 == 0: # TODO: How often to restore snapshot
                                     vm = p.name
                                     snapshot = allSnapshots[allVMs.index(vm)]
                                     prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
@@ -180,10 +181,13 @@ def main():
                             availableVMs.append(p.name)
                             currentProcesses.remove(p)
 
+                
                 ########################################################
                 ## Analyze all introspy database files after analysis ##
                 ########################################################
-                for app in allAPKs:
+                # Try to save some time by only analyzing apps that have been recently (re)analyzed
+                allApps = malTraining + goodTraining + malTest + goodTest if not reanalysis else reanalyzeMalware + reanalyzeGoodware
+                for app in allApps:
                     # 0. Retrieve the database file corresponding to the app
                     dbFile = app.replace(".apk", ".db")
                     # 1.a. Check that the database exists ...
@@ -215,10 +219,15 @@ def main():
                     jsonTraceFile.close()
 
                     # 7.c. Extract and save numerical features
-                    prettyPrint("Extracting hybrid features from APK")
-                    sfBasic, sfPermissions, sfAPI, staticFeatures = extractStaticFeatures(dbFile.replace(".db", ".apk"))
-                    dynamicFeatures = extractIntrospyFeatures(jsonTraceFile.name)
-                    if len(staticFeatures) < 1 or len(dynamicFeatures) < 1:
+                    prettyPrint("Extracting %s features from APK" % arguments.featuretype)
+                    staticFeatures, dynamicFeatures = [], []
+                    # Save time in case of dynamic features
+                    if arguments.featuretype == "static" or arguments.featuretype == "hybrid":
+                        sfBasic, sfPermissions, sfAPI, staticFeatures = extractStaticFeatures(app)
+                    elif arguments.featuretype == "dynamic" or arguments.featuretype == "hybrid":
+                        dynamicFeatures = extractIntrospyFeatures(jsonTraceFile.name)
+
+                    if len(staticFeatures) + len(dynamicFeatures) < 1:
                         prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
                         continue
                     # Otherwise, store the features
@@ -241,7 +250,11 @@ def main():
             ####################################################################
             # Load numerical features
             allFeatureFiles = glob.glob("%s/*.%s" % (arguments.malwaredir, arguments.fileextension)) + glob.glob("%s/*.%s" % (arguments.goodwaredir, arguments.fileextension))
-            prettyPrint("Retrieved %s feature files files" % len(allFeatureFiles))
+            if len(allFeatureFiles) < 1:
+                prettyPrint("Could not retrieve any feature files. Exiting", "error")
+                return False
+
+            prettyPrint("Retrieved %s feature files" % len(allFeatureFiles))
             # Split the loaded feature files as training and test 
             Xtr, ytr, Xte, yte = [], [], [], []
             for ff in allFeatureFiles:
@@ -260,43 +273,46 @@ def main():
                     Xte.append(x)
                     yte.append(0)
 
-            metrics = {}
+            metricsDict, metricsDict_test = {}, {}
             ####################################
             # Ensemble of learning algorithms #
             ###################################
             prettyPrint("Ensemble mode classification: K-NN, SVM, and Random Forests")
             # Classifying using K-nearest neighbors
             K = [10, 25, 50, 100, 250, 500]
-            E = [10, 25, 50, 75, 100]
             for k in K:
                 prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
-                predicted, predicted_test = ScikitLearners.predictAndTestKNN(X, y, Xtest, ytest, K=k, selectKBest=int(arguments.selectkbest))
-                metrics = ScikitLearners.calculateMetrics(y, predicted)
-                metrics_test = ScikitLearners.calculateMetrics(ytest, predicted_test)
+                predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k, selectKBest=int(arguments.selectkbest))
+                metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+                metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 metricsDict["KNN%s" % k] = metrics
-                metricsDict_test["KNN%s" % k] = metrics_dict
+                metricsDict_test["KNN%s" % k] = metrics_test
 
             # Classifying using Random Forests
             E = [10, 25, 50, 75, 100]
             for e in E:
                 prettyPrint("Classifying using Random Forests with %s estimators" % e)
-                predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(X, y, Xtest, ytest, estimators=e, selectKBest=int(arguments.selectkbest))
-                metrics = ScikitLearners.calculateMetrics(y, predicted)
-                metrics_test = ScikitLearners.calculateMetrics(ytest, predicted_test)
+                predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, Xte, yte, estimators=e, selectKBest=int(arguments.selectkbest))
+                metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+                metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 metricsDict["Trees%s" % e] = metrics
                 metricsDict_test["Trees%s" % e] = metrics_test
 
             # Classifying using SVM
             prettyPrint("Classifying using Support vector machines")
-            predicted, predicted_test = ScikitLearners.predictAndTestSVM(X, y, Xtest, ytest, selectKBest=int(arguments.selectkbest))
-            metrics = ScikitLearners.calculateMetrics(y, predicted)
+            predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, Xte, yte, selectKBest=int(arguments.selectkbest))
+            metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+            metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
             metricsDict["SVM"] = metrics
+            metricsDict_test["SVM"] = metrics_test
                 
             # Now do the majority voting ensemble
-            allCs = ["KNN-%s" % x for x in k] + ["FOREST-%s" % e for e in E] + ["SVM"]
-            predicted, predicted_test = predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=allCs, selectKBest=int(arguments.selectkbest))
-            metricsDict["Ensemble"] = ScikitLearners.calculateMetrics(predicted, y)
-            metrics = metricsDict["Ensemble"] # Used to decide upon whether to iterate more
+            allCs = ["KNN-%s" % x for x in K] + ["FOREST-%s" % e for e in E] + ["SVM"]
+            predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, Xte, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
+            metrics = ScikitLearners.calculateMetrics(predicted, ytr) # Used to decide upon whether to iterate more
+            metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
+            metricsDict["Ensemble"] = metrics
+            metricsDict_test["Ensemble"] = metrics_test
       
             # Print and save results
             for m in metricsDict:
@@ -314,8 +330,8 @@ def main():
 
             # Save incorrectly-classified training instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
-            for index in range(len(y)):
-                if predicted[index] != y[index]:
+            for index in range(len(ytr)):
+                if predicted[index] != ytr[index]:
                     # malware instances are in hashes whereas this appends their package names to the list. Update either!!
                     if allFeatureFiles[index].find("malware") != -1:
                         reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
@@ -342,6 +358,8 @@ def main():
                 tstamp = int(time.time()) 
                 aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, "TEST", str(metricsDict_test[m]["accuracy"]), str(metricsDict_test[m]["recall"]), str(metricsDict_test[m]["specificity"]),str(metricsDict_test[m]["precision"]), str(metricsDict_test[m]["f1score"])])
 
+            # Commit results to the database
+            aionDB.save()
 
             # Restore snapshots of all VMs
             vms, snaps = arguments.vmnames.split(','), arguments.vmsnapshots.split(',')
@@ -357,6 +375,9 @@ def main():
                       prettyPrint("Successfully restored AVD")
                   else:
                       prettyPrint("An error occurred while restoring the AVD")
+
+            # Update the iteration number
+            iteration += 1
             
         # Final Results
         prettyPrint("Training results after %s iterations" % iteration, "output")
@@ -366,7 +387,10 @@ def main():
         prettyPrint("Precision: %s" % currentMetrics["precision"], "output")
         prettyPrint("F1 Score: %s" % currentMetrics["f1score"], "output")
 
-        # TODO: Don't forget to save and close the Aion database
+        # Update the current run's end time
+        aionDB.update("run", [("runEnd", getTimestamp())], [("runID", arguments.runnumber)]) # UPDATE run SET runEnd=X WHERE runID=[runnumber]
+
+        # Don't forget to save and close the Aion database
         aionDB.close()
 
     except Exception as e:

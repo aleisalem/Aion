@@ -9,6 +9,7 @@ import sklearn, numpy
 from sklearn import svm, tree, neighbors, ensemble
 from sklearn.model_selection import cross_val_predict, KFold
 from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import *
 
 import os
@@ -77,9 +78,8 @@ def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
             # Add to list
             ensembleClassifiers.append((c, clf))
         # Select K Best features if applicable
-        if selectKBest > 0:
-            X_new = SelectKBest(chi2, k=selectKBest).fit_transform(X, y) if selectKBest > 0 else X
-            Xtest_new = SelectKBest(chi2, k=selectKBest).fit_transform(Xtest, ytest) if selectKBest > 0 else Xtest
+        X_new = SelectKBest(chi2, k=selectKBest).fit_transform(X, y) if selectKBest > 0 else X
+        Xtest_new = SelectKBest(chi2, k=selectKBest).fit_transform(Xtest, ytest) if selectKBest > 0 else Xtest
         # Train and fit the voting classifier
         voting = VotingClassifier(estimators=ensembleClassifiers, voting='hard')
         prettyPrint("Fitting ensemble model")
@@ -88,7 +88,7 @@ def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
         predicted = voting.predict(X_new)
         # Same for the test dataset
         prettyPrint("Testing the model")
-        predicted_test = voting.predict(X_test)
+        predicted_test = voting.predict(Xtest_new)
 
     except Exception as e:
         prettyPrintError(e) 
@@ -151,7 +151,7 @@ def predictAndTestKNN(X, y, Xtest, ytest, K=10, selectKBest=0):
         # Select K Best features if enabled
         prettyPrint("Selecting %s best features from feature vectors" % selectKBest)
         X_new = SelectKBest(chi2, k=selectKBest).fit_transform(X, y) if selectKBest > 0 else X
-        Xtest_new = SelectKBest(chi2, k=selectKBest).fit_transform(Xtest, ytest) if selectKBest else Xtest_new
+        Xtest_new = SelectKBest(chi2, k=selectKBest).fit_transform(Xtest, ytest) if selectKBest else Xtest
         # Fit model
         prettyPrint("Fitting model")
         clf.fit(X_new, y)
@@ -409,6 +409,8 @@ def predictAndTestSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0):
         prettyPrintError(e)
         return [], []
 
+    return predicted, predicted_test
+
 
 def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0, kfold=10):
     """
@@ -555,7 +557,8 @@ def predictAndTestRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gin
     except Exception as e:
         prettyPrintError(e)
         return [], []
-
+    
+    return predicted, predicted_test
 
 
 def predictAndTestKFoldRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gini", maxdepth=None, selectKBest=0, kfold=10):

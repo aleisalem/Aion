@@ -35,7 +35,7 @@ class AionDB():
                 self.conn = sqlite3.connect(dbPath)
             # Insert a record about the current run
             startTime = getTimestamp()
-            self.insert(table="run", columns=[], values=["'%s'" % runID, "'%s'" % runDataset, "'%s'" % startTime, "'N/A'", "'0'"])
+            self.insert(table="run", columns=[], values=["%s" % runID, "%s" % runDataset, "%s" % startTime, "N/A", "0"])
 
         except Exception as e:
             prettyPrintError(e)
@@ -49,7 +49,6 @@ class AionDB():
             if not self.save():
                 prettyPrint("Unable to save the current state of the database", "warning")
                 return False
-            self.close()
         except Exception as e:
             prettyPrintError(e)
             return False
@@ -120,7 +119,6 @@ class AionDB():
         try:
             # Prepare values
             values = ["'%s'" % str(v) for v in values]
-            print values
             # Build query
             if len(columns) > 0:
                 query = "INSERT INTO %s (%s) VALUES (%s)" % (table, ",".join(columns), ",".join(values))

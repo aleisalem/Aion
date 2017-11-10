@@ -24,3 +24,6 @@ files/scripts/*
 
 # Ignore back up files
 *.py_bak
+
+# Ignore database files
+*.db
