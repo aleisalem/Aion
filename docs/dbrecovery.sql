@@ -4,11 +4,12 @@ CREATE TABLE learner(
 );
 
 CREATE TABLE run( 
-    runID       	INTEGER PRIMARY KEY, 
-    runDataset  	TEXT, 
+    runID       	INTEGER, 
+    runDataset  	TEXT,
     runStart  		TEXT,
     runEnd		TEXT,
-    runIterations	INTEGER
+    runIterations	INTEGER,
+    PRIMARY KEY (runID, runDataset)
 );
 
 CREATE TABLE app( 
