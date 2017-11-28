@@ -27,6 +27,7 @@ CREATE TABLE datapoint (
     dpIteration		INTEGER,
     dpRun		INTEGER,
     dpTimestamp 	TEXT,
+    dpFeature           TEXT,
     dpType          	TEXT,
     dpAccuracy		REAL,
     dpRecall		REAL,

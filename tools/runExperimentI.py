@@ -34,13 +34,14 @@ def defineArguments():
     parser.add_argument("-s", "--selectkbest", help="Whether to select K best features from the ones extracted from the APK's", required=False, default=0)
     parser.add_argument("-e", "--featuretype", help="The type of features to consider during training", required=False, default="hybrid", choices=["static", "dynamic", "hybrid"])
     parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="txt")
+    parser.add_argument("-m", "--accuracymargin", help="The margin (in percentage) within which the training accuracy is allowed to dip", required=False, default=1)
     return parser
 
 def main():
     try:
         argumentParser = defineArguments()
         arguments = argumentParser.parse_args()
-        prettyPrint("Welcome to the \"Aion\"'s experiment I")
+        prettyPrint("Welcome to the \"Aion\"'s dynamic experiment I")
 
         if arguments.vmnames == "":
             prettyPrint("No virtual machine names were supplied. Exiting", "warning")
@@ -94,7 +95,7 @@ def main():
         goodTraining += goodAPKs
         prettyPrint("[GOODWARE] Training dataset size is %s, test dataset size is %s" % (len(goodTraining), len(goodTest)))
 
-        while currentMetrics["f1score"] > previousMetrics["f1score"]:
+        while round(currentMetrics["f1score"] - previousMetrics["f1score"], 2) >= -(float(arguments.accuracymargin)/100.0):
             # Set/update the reanalysis flag
             reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
@@ -112,6 +113,7 @@ def main():
                     currentAPK = allAPKs.pop()
                     # Update the number of times an app has been stimulated
                     appPath = currentAPK[currentAPK.rfind("/")+1:] # Get the key
+                    prettyPrint("Looking up the app \"%s\" in the hashes database" % appPath)
                     appName = hashesDB.get(appPath.lower().replace(".apk", ""))
                     if appName == None or appName == "":
                         appName = hashesDB.get(hashlib.sha256(appPath.lower()).hexdigest())
@@ -119,7 +121,8 @@ def main():
                         # We have to analyze the app
                         prettyPrint("Analyzing the app to retrieve package name", "warning")
                         apk, dx, vm = Droidutan.analyzeAPK(currentAPK)
-                        appName = apk.package
+                        appName = appPath.replace(".apk", "") if apk == None else apk.package  
+                    prettyPrint("App name: %s" % appName)
                     # Update the database
                     # Does it already exist in the database
                     results = aionDB.select([], "app", [("appName", appName), ("appRunID", arguments.runnumber)])
@@ -235,7 +238,7 @@ def main():
                         features = staticFeatures
                     elif arguments.featuretype == "dynamic":
                         features = dynamicFeatures
-                    else:
+                    elif arguments.featuretype == "hybrid":
                         features = staticFeatures + dynamicFeatures # Can static features help with the mediocre specificity scores?
                            
                     # Write features to file
@@ -326,7 +329,7 @@ def main():
                 # Insert datapoint into the database
                 learnerID = learners[m.lower()]                
                 tstamp = int(time.time()) 
-                aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, "TRAIN", str(metricsDict[m]["accuracy"]), str(metricsDict[m]["recall"]), str(metricsDict[m]["specificity"]),str( metricsDict[m]["precision"]), str(metricsDict[m]["f1score"])])
+                aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TRAIN", str(metricsDict[m]["accuracy"]), str(metricsDict[m]["recall"]), str(metricsDict[m]["specificity"]),str( metricsDict[m]["precision"]), str(metricsDict[m]["f1score"])])
 
             # Save incorrectly-classified training instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
@@ -356,7 +359,7 @@ def main():
                 # Insert datapoint into the database
                 learnerID = learners[m.lower()]                
                 tstamp = int(time.time()) 
-                aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, "TEST", str(metricsDict_test[m]["accuracy"]), str(metricsDict_test[m]["recall"]), str(metricsDict_test[m]["specificity"]),str(metricsDict_test[m]["precision"]), str(metricsDict_test[m]["f1score"])])
+                aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TEST", str(metricsDict_test[m]["accuracy"]), str(metricsDict_test[m]["recall"]), str(metricsDict_test[m]["specificity"]),str(metricsDict_test[m]["precision"]), str(metricsDict_test[m]["f1score"])])
 
             # Commit results to the database
             aionDB.save()

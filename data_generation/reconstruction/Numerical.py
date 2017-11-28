@@ -13,7 +13,10 @@ def loadNumericalFeatures(featuresFile, delimiter=","):
             prettyPrint("Unable to find the features file \"%s\"" % featuresFile, "warning")
             return []
         content = open(featuresFile).read()
-        features = [float(f) for f in content[1:-1].split(delimiter)]
+        if content.lower().find("[") != -1 and content.lower().find("]") != -1:
+            features = eval(content)
+        else:
+            features = [float(f) for f in content[1:-1].split(delimiter)]
 
     except Exception as e:
         prettyPrintError(e)
