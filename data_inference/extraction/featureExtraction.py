@@ -267,14 +267,16 @@ def extractDroidmonFeatures(logPath, mode="classes"):
             tmp = line[line.find("{"):].replace('\n','').replace('\r','')
             # Extract class and method
             c, m = "", ""
-            if tmp[0] == '{' and tmp[-1] == '}':
-                d = eval(tmp)
-                c, m = d["class"], d["method"]
-            else:
-                index = tmp.find("class\":\"")
-                c = tmp[index+len("class\":\""):tmp.find("\"", index)]
-                index = tmp.find("method\":\"")
-                m = tmp[index+len("method\":\""):tmp.find("\"", index)]
+            #if tmp[0] == '{' and tmp[-1] == '}':
+            #    d = eval(tmp)
+            #    c, m = d["class"], d["method"]
+            #else:
+            pattern = "class\":\""
+            index = tmp.find(pattern)
+            c = tmp[index+len(pattern):tmp.find("\"", index+len(pattern))]
+            pattern = "method\":\""
+            index = tmp.find(pattern)
+            m = tmp[index+len(pattern):tmp.find("\"", index+len(pattern))]
             # Append to trace
             if mode == "classes":
                 trace.append(c)
