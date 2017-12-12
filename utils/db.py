@@ -34,7 +34,7 @@ class AionDB():
             else:
                 self.conn = sqlite3.connect(dbPath)
             # Insert a record about the current run
-            startTime = getTimestamp()
+            startTime = getTimestamp(includeDate=True)
             self.insert(table="run", columns=[], values=["%s" % runID, "%s" % runDataset, "%s" % startTime, "N/A", "0"])
 
         except Exception as e:

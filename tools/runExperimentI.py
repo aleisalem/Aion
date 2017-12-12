@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-from Aion.data_generation.stimulation.Garfield import Garfield
 from Aion.data_generation.reconstruction import *
 from Aion.data_inference.learning import HMM, ScikitLearners
 from Aion.data_inference.extraction.featureExtraction import *
@@ -33,8 +32,9 @@ def defineArguments():
     parser.add_argument("-k", "--kfold", help="Whether to use k-fold cross validation and the value of \"K\". Valid for 'validation' type of 'validation'", required=False, default=2)
     parser.add_argument("-s", "--selectkbest", help="Whether to select K best features from the ones extracted from the APK's", required=False, default=0)
     parser.add_argument("-e", "--featuretype", help="The type of features to consider during training", required=False, default="hybrid", choices=["static", "dynamic", "hybrid"])
-    parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="txt")
+    parser.add_argument("-p", "--fileextension", help="The extension of feature files", required=False, default="num")
     parser.add_argument("-m", "--accuracymargin", help="The margin (in percentage) within which the training accuracy is allowed to dip", required=False, default=1)
+    parser.add_argument("-i", "--maxiterations", help="The maximum number of iterations to allow", required=False, default=25)
     return parser
 
 def main():
@@ -95,12 +95,12 @@ def main():
         goodTraining += goodAPKs
         prettyPrint("[GOODWARE] Training dataset size is %s, test dataset size is %s" % (len(goodTraining), len(goodTest)))
 
-        while round(currentMetrics["f1score"] - previousMetrics["f1score"], 2) >= -(float(arguments.accuracymargin)/100.0):
+        while (round(currentMetrics["f1score"] - previousMetrics["f1score"], 2) >= -(float(arguments.accuracymargin)/100.0)) and (iteration <= int(arguments.maxiterations)):
             # Set/update the reanalysis flag
             reanalysis = True if iteration > 1 else False
             prettyPrint("Experiment I: iteration #%s" % iteration, "info2")
             # Update the iteration number
-            aionDB.update("run", [("runIterations", str(iteration))], [("runID", arguments.runnumber)]) # UPDATE run SET runIterations=X WHERE runID=[runnumber]
+            aionDB.update("run", [("runIterations", str(iteration))], [("runID", arguments.runnumber), ("runDataset", arguments.datasetname)]) # UPDATE run SET runIterations=X WHERE runID=[runnumber]
             if arguments.analyzeapks == "yes":
                 allAPKs = malTraining + goodTraining + malTest + goodTest if not reanalysis else reanalyzeMalware + reanalyzeGoodware
                 ########################
@@ -127,7 +127,7 @@ def main():
                     # Does it already exist in the database
                     results = aionDB.select([], "app", [("appName", appName), ("appRunID", arguments.runnumber)])
                     rows = results.fetchall()
-                    if len(rows) <= 0:
+                    if len(rows) < 1:
                         appType = "malware" if currentAPK.lower().find("malware") != -1 else "goodware"
                         aionDB.insert("app", ["appName", "appType", "appRunID", "appRuns"], [appName, appType, arguments.runnumber,1])
                     else:
@@ -227,24 +227,27 @@ def main():
                     # Save time in case of dynamic features
                     if arguments.featuretype == "static" or arguments.featuretype == "hybrid":
                         sfBasic, sfPermissions, sfAPI, staticFeatures = extractStaticFeatures(app)
-                    elif arguments.featuretype == "dynamic" or arguments.featuretype == "hybrid":
+                        prettyPrint("Successfully extracted %s static features" % len(staticFeatures))
+                    if arguments.featuretype == "dynamic" or arguments.featuretype == "hybrid":
                         dynamicFeatures = extractIntrospyFeatures(jsonTraceFile.name)
+                        prettyPrint("Successfully extracted %s dynamic features" % len(dynamicFeatures))
 
-                    if len(staticFeatures) + len(dynamicFeatures) < 1:
-                        prettyPrint("An error occurred while extracting static or dynamic features. Skipping", "warning")
-                        continue
-                    # Otherwise, store the features
-                    if arguments.featuretype == "static":
+                    # Store the features
+                    if arguments.featuretype == "static" and len(staticFeatures) > 0:
                         features = staticFeatures
-                    elif arguments.featuretype == "dynamic":
+                    elif arguments.featuretype == "dynamic" and len(dynamicFeatures) > 0:
                         features = dynamicFeatures
-                    elif arguments.featuretype == "hybrid":
-                        features = staticFeatures + dynamicFeatures # Can static features help with the mediocre specificity scores?
+                    elif arguments.featuretype == "hybrid" and len(staticFeatures) > 0 and len(dynamicFeatures) > 0:
+                        features = staticFeatures + dynamicFeatures
                            
                     # Write features to file
                     featuresFile = open(dbFile.replace(".db", ".%s" % arguments.fileextension), "w")
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
+                    if arguments.featuretype == "hybrid":
+                        featuresFile = open(dbFile.replace(".db", ".dyn"), "w")
+                        featuresFile.write("%s\n" % str(dynamicFeatures)[1:-1])
+                        featuresFile.close()
 
                     prettyPrint("Done analyzing \"%s\"" % dbFile)
 
@@ -256,6 +259,10 @@ def main():
             if len(allFeatureFiles) < 1:
                 prettyPrint("Could not retrieve any feature files. Exiting", "error")
                 return False
+
+            allDynamicFiles = glob.glob("%s/*.dyn" % arguments.malwaredir) + glob.glob("%s/*.dyn" % arguments.goodwaredir)
+            if len(allDynamicFiles) < 1:
+                prettyPRint("Could not retrieve any dynamic features files", "warning")
 
             prettyPrint("Retrieved %s feature files" % len(allFeatureFiles))
             # Split the loaded feature files as training and test 
@@ -276,7 +283,20 @@ def main():
                     Xte.append(x)
                     yte.append(0)
 
+            # Do the same for dynamic features
+            if len(allDynamicFiles) > 1:
+                Xtrd, Xted = [], []
+                for ff in allDynamicFiles:
+                    fileName = ff.replace(".dyn", ".apk")
+                    x = Numerical.loadNumericalFeatures(ff)
+                    if fileName in malTraining + goodTraining:
+                        Xtrd.append(x)
+                    elif fileName in malTest + goodTest:
+                        Xted.append(x)
+
+
             metricsDict, metricsDict_test = {}, {}
+            dynamicDict, dynamicDict_test = {}, {}
             ####################################
             # Ensemble of learning algorithms #
             ###################################
@@ -290,6 +310,15 @@ def main():
                 metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 metricsDict["KNN%s" % k] = metrics
                 metricsDict_test["KNN%s" % k] = metrics_test
+                if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                    # Same for dynamic features
+                    prettyPrint("Classifying using K-nearest neighbors with K=%s and dynamic features" % k)
+                    predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtrd, ytr, Xted, yte, K=k, selectKBest=int(arguments.selectkbest))
+                    metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+                    metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
+                    dynamicDict["KNN%s" % k] = metrics
+                    dynamicDict_test["KNN%s" % k] = metrics_test
+
 
             # Classifying using Random Forests
             E = [10, 25, 50, 75, 100]
@@ -300,6 +329,14 @@ def main():
                 metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 metricsDict["Trees%s" % e] = metrics
                 metricsDict_test["Trees%s" % e] = metrics_test
+                if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                    # Same for dynamic features
+                    prettyPrint("Classifying using Random Forests with %s estimators and dynamic features" % e)
+                    predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtrd, ytr, Xted, yte, estimators=e, selectKBest=int(arguments.selectkbest))
+                    metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+                    metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
+                    dynamicDict["Trees%s" % e] = metrics
+                    dynamicDict_test["Trees%s" % e] = metrics_test
 
             # Classifying using SVM
             prettyPrint("Classifying using Support vector machines")
@@ -308,6 +345,15 @@ def main():
             metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
             metricsDict["SVM"] = metrics
             metricsDict_test["SVM"] = metrics_test
+            if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                # Same for dynamic features
+                prettyPrint("Classifying using Support vector machines and dunamic features")
+                predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtrd, ytr, Xted, yte, selectKBest=int(arguments.selectkbest))
+                metrics = ScikitLearners.calculateMetrics(ytr, predicted)
+                metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
+                dynamicDict["SVM"] = metrics
+                dynamicDict_test["SVM"] = metrics_test
+
                 
             # Now do the majority voting ensemble
             allCs = ["KNN-%s" % x for x in K] + ["FOREST-%s" % e for e in E] + ["SVM"]
@@ -316,6 +362,14 @@ def main():
             metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
             metricsDict["Ensemble"] = metrics
             metricsDict_test["Ensemble"] = metrics_test
+            if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                # Same for dynamic features
+                predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtrd, ytr, Xted, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
+                metrics = ScikitLearners.calculateMetrics(predicted, ytr) # Used to decide upon whether to iterate more
+                metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
+                dynamicDict["Ensemble"] = metrics
+                dynamicDict_test["Ensemble"] = metrics_test
+
       
             # Print and save results
             for m in metricsDict:
@@ -328,8 +382,24 @@ def main():
                 prettyPrint("F1 Score: %s" %  str(metricsDict[m]["f1score"]), "output")
                 # Insert datapoint into the database
                 learnerID = learners[m.lower()]                
-                tstamp = int(time.time()) 
+                tstamp = getTimestamp(includeDate=True)#int(time.time()) 
                 aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TRAIN", str(metricsDict[m]["accuracy"]), str(metricsDict[m]["recall"]), str(metricsDict[m]["specificity"]),str( metricsDict[m]["precision"]), str(metricsDict[m]["f1score"])])
+
+
+            # Print and save results (Dynamic features)
+            if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                for d in dynamicDict:
+                    # The average metrics for training dataset
+                    prettyPrint("Metrics using %s-fold cross validation and %s and dynamic features" % (arguments.kfold, d), "output")
+                    prettyPrint("Accuracy: %s" % str(dynamicDict[d]["accuracy"]), "output")
+                    prettyPrint("Recall: %s" % str(dynamicDict[d]["recall"]), "output")
+                    prettyPrint("Specificity: %s" % str(dynamicDict[d]["specificity"]), "output")
+                    prettyPrint("Precision: %s" % str(dynamicDict[d]["precision"]), "output")
+                    prettyPrint("F1 Score: %s" %  str(dynamicDict[d]["f1score"]), "output")
+                    # Insert datapoint into the database
+                    learnerID = learners[d.lower()]                
+                    tstamp = getTimestamp(includeDate=True)#int(time.time()) 
+                    aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, "dynamic", "TRAIN", str(dynamicDict[d]["accuracy"]), str(dynamicDict[d]["recall"]), str(dynamicDict[d]["specificity"]),str(dynamicDict[d]["precision"]), str(dynamicDict[d]["f1score"])])
 
             # Save incorrectly-classified training instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
@@ -345,7 +415,7 @@ def main():
 
             # Swapping metrics
             previousMetrics = currentMetrics
-            currentMetrics = metrics
+            currentMetrics = metricsDict["Ensemble"]
 
             # Print and save results [FOR THE TEST DATASET]
             for m in metricsDict_test:
@@ -358,8 +428,23 @@ def main():
                 prettyPrint("F1 Score: %s" %  str(metricsDict_test[m]["f1score"]), "output")
                 # Insert datapoint into the database
                 learnerID = learners[m.lower()]                
-                tstamp = int(time.time()) 
+                tstamp = getTimestamp(includeDate=True)#int(time.time()) 
                 aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TEST", str(metricsDict_test[m]["accuracy"]), str(metricsDict_test[m]["recall"]), str(metricsDict_test[m]["specificity"]),str(metricsDict_test[m]["precision"]), str(metricsDict_test[m]["f1score"])])
+
+            # Print and save results (Dynamic features)
+            if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
+                for d in dynamicDict_test:
+                    # The average metrics for training dataset
+                    prettyPrint("Metrics using %s-fold cross validation and %s and dynamic features" % (arguments.kfold, d), "output")
+                    prettyPrint("Accuracy: %s" % str(dynamicDict_test[d]["accuracy"]), "output")
+                    prettyPrint("Recall: %s" % str(dynamicDict_test[d]["recall"]), "output")
+                    prettyPrint("Specificity: %s" % str(dynamicDict_test[d]["specificity"]), "output")
+                    prettyPrint("Precision: %s" % str(dynamicDict_test[d]["precision"]), "output")
+                    prettyPrint("F1 Score: %s" %  str(dynamicDict_test[d]["f1score"]), "output")
+                    # Insert datapoint into the database
+                    learnerID = learners[d.lower()]                
+                    tstamp = getTimestamp(includeDate=True)#int(time.time()) 
+                    aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, "dynamic", "TEST", str(dynamicDict_test[d]["accuracy"]), str(dynamicDict_test[d]["recall"]), str(dynamicDict_test[d]["specificity"]),str(dynamicDict_test[d]["precision"]), str(dynamicDict_test[d]["f1score"])])
 
             # Commit results to the database
             aionDB.save()
@@ -391,7 +476,7 @@ def main():
         prettyPrint("F1 Score: %s" % currentMetrics["f1score"], "output")
 
         # Update the current run's end time
-        aionDB.update("run", [("runEnd", getTimestamp())], [("runID", arguments.runnumber)]) # UPDATE run SET runEnd=X WHERE runID=[runnumber]
+        aionDB.update("run", [("runEnd", getTimestamp(includeDate=True))], [("runID", arguments.runnumber)]) # UPDATE run SET runEnd=X WHERE runID=[runnumber]
 
         # Don't forget to save and close the Aion database
         aionDB.close()
