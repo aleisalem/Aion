@@ -89,7 +89,7 @@ class DroidbotAnalysis(Process):
 
             # 4.c. Filter the logcat dumped by droidbot
             logFile = open("%s/logcat_filtered.log" % droidbotOut, "w")
-            catlog = subprocess.Popen(("cat", "%s/logcat.txt"), stdout=subprocess.PIPE)
+            catlog = subprocess.Popen(("cat", "%s/logcat.txt" % droidbotOut), stdout=subprocess.PIPE)
             output = subprocess.check_output(("grep", "-i", "droidmon-apimonitor-%s" % apk.package), stdin=catlog.stdout)
             logFile.write(output)
             catlog.wait()
