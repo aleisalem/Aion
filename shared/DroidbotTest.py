@@ -80,7 +80,7 @@ class DroidbotAnalysis(Process):
             # Step 4. Test the APK using Droidbot (Assuming machine is already on)
             prettyPrint("Testing the APK \"%s\" using Droidbot" % appComponents["package_name"])
             # 4.a. Start Droidbot
-            status = Droidutan.testApp(self.processTarget, avdSerialno=avdIP, testDuration=int(self.processDuration), useIntrospy=True, preExtractedComponents=appComponents, allowCrashes=True)
+            status = subprocess.Popen(droidbotCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
 
             # 4.b. Check for existence of output directory
             if not os.path.exists(droidbotOut):
