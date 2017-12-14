@@ -63,7 +63,8 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
             result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
             time.sleep(1)
         # Power on the Genymotion AVD again
-        subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        poweron = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        #poweron.wait() # TODO: Returns only after machine exits
         time.sleep(waitToBoot)
 
     except Exception as e:
