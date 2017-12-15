@@ -54,6 +54,8 @@ class DroidbotAnalysis(Process):
             s = Session()
             s.add(self.processTarget, open(self.processTarget).read())
             apk = s.analyzed_apk.values()[0]
+            if type(apk) == list:
+                apk = s.analyzed_apk.values()[0][0]
 
             # Step 2. Get the Ip address assigned to the AVD
             getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", self.processVM]
@@ -69,16 +71,12 @@ class DroidbotAnalysis(Process):
                 index += 1
             adbID = "%s:5555" % avdIP
 
-            if verboseON():
-                prettyPrint("Waiting for machine to boot ...", "debug")                
-            os.system("adb -s %s wait-for-device" % avdIP)
-
             # Step 3. Define frequently-used commands
             droidbotOut = self.processTarget.replace(".apk", "_droidbot")
-            droidbotCmd = ["droidbot", "-d", adbID, "-a", self.processTarget, "-o", droidbotOut, "-timeout", self.processDuration, "-random", "-keep_env", "-grant_perm"]
+            droidbotCmd = ["droidbot", "-d", adbID, "-a", self.processTarget, "-o", droidbotOut, "-timeout", str(self.processDuration), "-random", "-keep_env", "-grant_perm"]
 
             # Step 4. Test the APK using Droidbot (Assuming machine is already on)
-            prettyPrint("Testing the APK \"%s\" using Droidbot" % appComponents["package_name"])
+            prettyPrint("Testing the APK \"%s\" using Droidbot" % apk.package)
             # 4.a. Start Droidbot
             status = subprocess.Popen(droidbotCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
 
@@ -92,11 +90,13 @@ class DroidbotAnalysis(Process):
             catlog = subprocess.Popen(("cat", "%s/logcat.txt" % droidbotOut), stdout=subprocess.PIPE)
             output = subprocess.check_output(("grep", "-i", "droidmon-apimonitor-%s" % apk.package), stdin=catlog.stdout)
             logFile.write(output)
-            catlog.wait()
             logFile.close()
 
+        except subprocess.CalledProcessError as cpe:
+            prettyPrint("Unable to find the tag \"Droidmon-apimonitor-%s\" in the log file" % apk.package, "warning")
         except Exception as e:
             prettyPrintError(e)
+            return False
 
         return True
 

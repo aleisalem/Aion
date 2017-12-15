@@ -2,7 +2,7 @@
 
 from Aion.utils.data import *
 
-import random, string, os, glob, subprocess, time
+import random, string, os, glob, subprocess, time, re
 from datetime import datetime
 
 
@@ -45,10 +45,31 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
     """
     try:
         # Define frequently-used commands
+        vBoxInfoCmd = ["vboxmanage", "showvminfo", vmName]
         vBoxRestoreCmd = ["vboxmanage", "snapshot", vmName, "restore", snapshotName]
         vBoxPowerOffCmd = ["vboxmanage", "controlvm", vmName, "poweroff"]
         genymotionStartCmd = [getGenymotionPlayer(), "--vm-name", vmName]
         genymotionPowerOffCmd = [getGenymotionPlayer(), "--poweroff", "--vm-name", vmName]
+        # Check whether the AVD is stuck in "Stopped" status
+        status = subprocess.Popen(vBoxInfoCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        if status.lower().find("stopping") != -1:
+            # Kill the VirtualBox process
+            # a) Get UUID of stuck AVD
+            uuid = ""
+            for line in status.split('\n'):
+                if line.find("UUID") != -1:
+                    uuid = line[line.rfind(' ')+1:]
+                    break 
+            # b) Get the PID of the process
+            pID = ""
+            ps = subprocess.Popen(["ps", "-eaf"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            ps.wait()
+            out = subprocess.Popen(["grep", "-i", uuid], stdin=ps.stdout, stdout=subprocess.PIPE).communicate()[0]
+            numbers = re.findall("\d+", out)
+            if len(numbers) > 0:
+                pID = str(numbers[0])
+            # c) Kill process
+            print subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
         # Power off the genymotion AVD
         subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
         # Attempt to restore the AVD's snapshot
