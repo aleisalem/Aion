@@ -155,6 +155,12 @@ def main():
                                     snapshot = allSnapshots[allVMs.index(vm)]
                                     prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
                                     restoreVirtualBoxSnapshot(vm, snapshot)
+
+                            elif checkAVDState(p.name, "stopping")[0]:
+                                prettyPrint("AVD \"%s\" is stuck at \"Stopping\". Forcing a restoration" % p.name, "warning")
+                                vm = p.name
+                                snapshot = allSnapshots[allVMs.index(vm)]
+                                restoreVirtualBoxSnapshot(vm, snapshot)
                                           
                         print [p.name for p in currentProcesses]
                         print [p.is_alive() for p in currentProcesses]
@@ -170,7 +176,7 @@ def main():
                     if arguments.analysisengine == "droidutan":
                         p = DroidutanAnalysis(pID, currentVM, (currentVM, ), currentAPK, int(arguments.analysistime))
                     elif arguments.analysisengine == "droidbot":
-                        p = DroidbotAnalysis(pID, currentVM, currentVM, currentAPK, int(arguments.analysistime))
+                        p = DroidbotAnalysis(pID, currentVM, currentVM, currentAPK, allSnapshots[allVMs.index(currentVM)], int(arguments.analysistime))
                     p.daemon = True # Process will be killed if main thread exits
                     p.start()
                     currentProcesses.append(p)
@@ -258,11 +264,11 @@ def main():
                         features = staticFeatures + dynamicFeatures
                            
                     # Write features to file
-                    featuresFile = open(inFile.replace(".db", ".%s" % arguments.fileextension), "w")
+                    featuresFile = open(app.replace(".apk", ".%s" % arguments.fileextension), "w")
                     featuresFile.write("%s\n" % str(features)[1:-1])
                     featuresFile.close()
                     if arguments.featuretype == "hybrid":
-                        featuresFile = open(inFile.replace(".db", ".dyn"), "w")
+                        featuresFile = open(app.replace(".apk", ".dyn"), "w")
                         featuresFile.write("%s\n" % str(dynamicFeatures)[1:-1])
                         featuresFile.close()
 
@@ -287,6 +293,9 @@ def main():
             for ff in allFeatureFiles:
                 fileName = ff.replace(".%s" % arguments.fileextension, ".apk")
                 x = Numerical.loadNumericalFeatures(ff)
+                if len(x) < 1:
+                    prettyPrint("Empty feature vector returned. Skipping", "warning")
+                    continue
                 if fileName in malTraining:
                     Xtr.append(x)
                     ytr.append(1) 
@@ -302,15 +311,26 @@ def main():
 
             # Do the same for dynamic features
             if len(allDynamicFiles) > 1:
-                Xtrd, Xted = [], []
+                prettyPrint("Processing %s dynamic features files" % len(allDynamicFiles))
+                Xtrd, ytrd, Xted, yted = [], [], [], []
                 for ff in allDynamicFiles:
                     fileName = ff.replace(".dyn", ".apk")
                     x = Numerical.loadNumericalFeatures(ff)
-                    if fileName in malTraining + goodTraining:
+                    if len(x) < 1:
+                        prettyPrint("Empty feature vector returned. Skipping", "warning")
+                        continue
+                    if fileName in malTraining:
                         Xtrd.append(x)
-                    elif fileName in malTest + goodTest:
+                        ytrd.append(1)
+                    elif fileName in goodTraining:
+                        Xtrd.append(x)
+                        ytrd.append(0)
+                    elif fileName in malTest:
                         Xted.append(x)
-
+                        yted.append(1)
+                    elif fileName in goodTest:
+                        Xted.append(x)
+                        yted.append(0)
 
             metricsDict, metricsDict_test = {}, {}
             dynamicDict, dynamicDict_test = {}, {}
@@ -319,7 +339,7 @@ def main():
             ###################################
             prettyPrint("Ensemble mode classification: K-NN, SVM, and Random Forests")
             # Classifying using K-nearest neighbors
-            K = [3, 5, 7, 9]#[10, 25, 50, 100, 250, 500]
+            K = [10, 25, 50, 100, 250, 500]
             for k in K:
                 prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
                 predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k, selectKBest=int(arguments.selectkbest))

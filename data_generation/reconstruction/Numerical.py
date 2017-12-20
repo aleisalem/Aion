@@ -16,7 +16,7 @@ def loadNumericalFeatures(featuresFile, delimiter=","):
         if content.lower().find("[") != -1 and content.lower().find("]") != -1:
             features = eval(content)
         else:
-            features = [float(f) for f in content[1:-1].split(delimiter)]
+            features = [float(f) for f in content.replace(' ','').split(delimiter)]
 
     except Exception as e:
         prettyPrintError(e)

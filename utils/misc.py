@@ -30,7 +30,45 @@ def getTimestamp(includeDate=False):
     else:
         return "[%s]"%str(datetime.now()).split(" ")[1]
 
-def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
+def checkAVDState(vmName, vmState="running"):
+    """
+    Checks the current VirtualBox state of an AVD (e.g., running, stopping, ...)
+    :param vmName: The name of the AVD to check
+    :type vmName: str
+    :param vmState: The status to check
+    :type vmState: str
+    :return: A boolean depicting whether the AVD is stuck and an str of its process ID
+    """
+    try:
+        isStuck = False
+        pID = ""
+        vBoxInfoCmd = ["vboxmanage", "showvminfo", vmName]
+        # Check whether the AVD is stuck in "Stopped" status
+        status = subprocess.Popen(vBoxInfoCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        if status.lower().find(vmState) != -1:
+            isStuck = True
+            # Kill the VirtualBox process
+            # a) Get UUID of stuck AVD
+            uuid = ""
+            for line in status.split('\n'):
+                if line.find("UUID") != -1:
+                    uuid = line[line.rfind(' ')+1:]
+                    break 
+            # b) Get the PID of the process
+            ps = subprocess.Popen(["ps", "-eaf"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            ps.wait()
+            out = subprocess.Popen(["grep", "-i", uuid], stdin=ps.stdout, stdout=subprocess.PIPE).communicate()[0]
+            numbers = re.findall("\d+", out)
+            if len(numbers) > 0:
+                pID = str(numbers[0])
+
+    except Exception as e:
+        print "[*] Error encountered: %s" % e
+        return False, ""
+ 
+    return isStuck, pID
+
+def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=25, waitToBoot=30):
     """
     Attempts to restore the snapshot of a VirtualBox machine
     :param vmName: The name of the virtual machine
@@ -45,33 +83,23 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
     """
     try:
         # Define frequently-used commands
-        vBoxInfoCmd = ["vboxmanage", "showvminfo", vmName]
         vBoxRestoreCmd = ["vboxmanage", "snapshot", vmName, "restore", snapshotName]
         vBoxPowerOffCmd = ["vboxmanage", "controlvm", vmName, "poweroff"]
         genymotionStartCmd = [getGenymotionPlayer(), "--vm-name", vmName]
-        genymotionPowerOffCmd = [getGenymotionPlayer(), "--poweroff", "--vm-name", vmName]
-        # Check whether the AVD is stuck in "Stopped" status
-        status = subprocess.Popen(vBoxInfoCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-        if status.lower().find("stopping") != -1:
-            # Kill the VirtualBox process
-            # a) Get UUID of stuck AVD
-            uuid = ""
-            for line in status.split('\n'):
-                if line.find("UUID") != -1:
-                    uuid = line[line.rfind(' ')+1:]
-                    break 
-            # b) Get the PID of the process
-            pID = ""
-            ps = subprocess.Popen(["ps", "-eaf"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            ps.wait()
-            out = subprocess.Popen(["grep", "-i", uuid], stdin=ps.stdout, stdout=subprocess.PIPE).communicate()[0]
-            numbers = re.findall("\d+", out)
-            if len(numbers) > 0:
-                pID = str(numbers[0])
-            # c) Kill process
+        genymotionPowerOffCmd = [getGenymotionPlayer(), "--vm-name", vmName, "--poweroff"]
+        # Check whether the machine is stuck in the "Stopping" phase
+        state, pID = checkAVDState(vmName, "stopping")
+        if state:
+            # Kill process
             print subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
         # Power off the genymotion AVD
         subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        # Make sure the AVD is dead
+        state, pID = checkAVDState(vmName, "running")
+        while state:
+            subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+            state, pID = checkAVDState(vmName, "running")
+        
         # Attempt to restore the AVD's snapshot
         result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
         counter = 0
@@ -80,12 +108,16 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=10, waitToBoot=30):
             if counter == retrials:
                 return False
             counter += 1
-            print "[*] Failed to restore snapshot. Retrying #%s" % counter
             result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
             time.sleep(1)
         # Power on the Genymotion AVD again
         poweron = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-        #poweron.wait() # TODO: Returns only after machine exits
+        state, pID = checkAVDState(vmName, "powered off")
+        while state:
+            time.sleep(10) # Sleep for 10 seconds
+            poweron = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+            state, pID = checkAVDState(vmName, "powered off")
+ 
         time.sleep(waitToBoot)
 
     except Exception as e:
