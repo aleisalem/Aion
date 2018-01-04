@@ -91,34 +91,42 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=25, waitToBoot=30):
         state, pID = checkAVDState(vmName, "stopping")
         if state:
             # Kill process
-            print subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+            print "[*] KILLING STOPPING \"%s\"" % vmName
+            subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
         # Power off the genymotion AVD
-        subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        print "[*] POWERING OFF \"%s\"" % vmName
+        poweroff = subprocess.Popen(genymotionPowerOffCmd)
+        poweroff.wait()
         # Make sure the AVD is dead
         state, pID = checkAVDState(vmName, "running")
         while state:
-            subprocess.Popen(["kill", pID], stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+            print "[*] POWERING OFF \"%s\"" % vmName
+            poweroff = subprocess.Popen(genymotionPowerOffCmd)
+            poweroff.wait()
             state, pID = checkAVDState(vmName, "running")
-        
         # Attempt to restore the AVD's snapshot
-        result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+        print "[*] RESTORING SNAPSHOT \"%s\" for \"%s\"" % (snapshotName, vmName)
+        restore = subprocess.Popen(vBoxRestoreCmd, stdout=subprocess.PIPE)
+        restore.wait()
         counter = 0
-        while result.lower().find("error") != -1:
-            print result
+        while restore.communicate()[0].lower().find("error") != -1:
+            print "[*] RESTORING SNAPSHOT \"%s\" for \"%s\". Trial #%s" % (snapshotName, vmName, counter+1)
             if counter == retrials:
                 return False
             counter += 1
-            result = subprocess.Popen(vBoxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-            time.sleep(1)
+            restore = subprocess.Popen(vBoxRestoreCmd, stdout=subprocess.PIPE)
+            restore.wait()
         # Power on the Genymotion AVD again
-        poweron = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        print "[*] POWERING ON \"%s\"" % vmName
+        poweron = subprocess.Popen(genymotionStartCmd)
+	time.sleep(waitToBoot)
         state, pID = checkAVDState(vmName, "powered off")
-        while state:
-            time.sleep(10) # Sleep for 10 seconds
-            poweron = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-            state, pID = checkAVDState(vmName, "powered off")
+        #while state:
+        #    print "[*] POWERING ON \"%s\"" % vmName
+        #    poweron = subprocess.Popen(genymotionStartCmd)
+	#    time.sleep(waitToBoot)
+        #    state, pID = checkAVDState(vmName, "powered off")
  
-        time.sleep(waitToBoot)
 
     except Exception as e:
         print e

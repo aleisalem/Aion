@@ -7,6 +7,7 @@ from Aion.utils.misc import *
 
 # Third-party imports
 from droidutan import Droidutan
+from androguard.session import Session
 
 # Python imports
 import os, sys, shutil, subprocess, threading, signal
@@ -24,8 +25,8 @@ class DroidutanAnalysis(Process):
         :type pID: int
         :param pName: A unique name given to a proces
         :type pName: str
-        :param pVM: The Genymotion AVD name and (optionally snapshot) to run the test on
-        :type pVM: tuple
+        :param pVM: The Genymotion AVD name to run the test on
+        :type pVM: str
         :param pTarget: The path to the APK under test
         :type pTarget: str
         :param pDuration: The duration of the Droidutan test in seconds (default: 60s)
@@ -49,14 +50,17 @@ class DroidutanAnalysis(Process):
             t = threading.Timer(float(self.processDuration)*5.0, self.stop)
             t.start()
             # Step 1. Analyze APK
-            #APKType = "malware" if self.processTarget.find("malware") != -1 else "goodware"
             if verboseON():
                 prettyPrint("Analyzing APK: \"%s\"" % self.processTarget, "debug")
             apk, dx, vm = Droidutan.analyzeAPK(self.processTarget)
+            if not apk:
+                prettyPrint("Could not retrieve an APK to analyze. Skipping", "warning")
+                return False
+            # 1.a. Extract app components
             appComponents = Droidutan.extractAppComponents(apk)
 
             # Step 2. Get the Ip address assigned to the AVD
-            getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", self.processVM[0]]
+            getAVDIPCmd = ["VBoxManage", "guestproperty", "enumerate", self.processVM]
             avdIP = ""
             result = subprocess.Popen(getAVDIPCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0].replace(' ', '')
             if result.lower().find("error") != -1:
@@ -69,75 +73,40 @@ class DroidutanAnalysis(Process):
                 index += 1
             adbID = "%s:5555" % avdIP
 
-            if verboseON():
-                prettyPrint("Waiting for machine to boot ...", "debug")                
-            os.system("adb -s %s wait-for-device" % avdIP)
-
             # Step 3. Define frequently-used commands
             adbPath = getADBPath()
-            vboxRestoreCmd = ["vboxmanage", "snapshot", self.processVM[0], "restore", self.processVM[1]] if len(self.processVM) == 2 else ""
-            vboxPowerOffCmd = ["vboxmanage", "controlvm", self.processVM[0], "poweroff"]
-            genymotionStartCmd = [getGenymotionPlayer(), "--vm-name", self.processVM[0]]
-            genymotionPowerOffCmd = [getGenymotionPlayer(), "--poweroff", "--vm-name", self.processVM[0]]
-            introspyDBName = self.processTarget.replace(".apk", ".db") #[self.threadTarget.rfind('/'):] # The APK's original name
-            self.adbPullCmd = [adbPath, "-s", adbID, "pull", "/data/data/%s/databases/introspy.db" % appComponents["package_name"], introspyDBName]
-            self.appUninstallCmd = [adbPath, "-s", adbID, "uninstall", appComponents["package_name"]]
+            dumpLogcatCmd = [adbPath, "-s", adbID, "logcat", "-d"]
+            clearLogcatCmd = [adbPath, "-s", adbID, "-c"]
 
-            ## Step 4. Prepare the Genymotion virtual Android device
-            ## 4.a. Restore vm to given snapshot
-            if vboxRestoreCmd != "":
-                # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
-                subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                # Now attempt restoring the snapshot
-                result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                if verboseON():
-                    prettyPrint("Restoring snapshot \"%s\"" % self.processVM[1], "debug")
-                result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                attempts = 1
-                while result.lower().find("error") != -1:
-                    print result
-                    # Retry restoring snapshot for 10 times and then exit
-                    if attempts == 10:
-                        prettyPrint("Failed to restore snapshot \"%s\" after 10 attempts. Exiting" % self.procesVM[1], "error")
-                        return False
-                    prettyPrint("Error encountered while restoring the snapshot \"%s\". Retrying ... %s" % (self.processVM[1], attempts), "warning")
-                    # Make sure the virtual machine is switched off for, both, genymotion and virtualbox
-                    subprocess.Popen(vboxPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                    # Now attempt restoring the snapshot
-                    result = subprocess.Popen(vboxRestoreCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                    attempts += 1
-                    time.sleep(1)
-
-                # 4.b. Start the Genymotion Android virtual device
-                if verboseON():
-                    prettyPrint("Starting the Genymotion machine \"%s\"" % self.processVM[0], "debug")
-                genyProcess = subprocess.Popen(genymotionStartCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-
-
-            # Step 5. Test the APK using Droidutan (Assuming machine is already on)
+            # Step 4. Test the APK using Droidutan (Assuming machine is already on)
+            prettyPrint("Clearing device log before test")
+            subprocess.Popen(clearLogcatCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
             prettyPrint("Testing the APK \"%s\" using Droidutan" % appComponents["package_name"])
-            # 5.a. Unleash Droidutan
-            success = Droidutan.testApp(self.processTarget, avdSerialno=avdIP, testDuration=int(self.processDuration), useIntrospy=True, preExtractedComponents=appComponents, allowCrashes=True)
+            # 4.a. Unleash Droidutan
+            success = Droidutan.testApp(self.processTarget, avdSerialno=avdIP, testDuration=int(self.processDuration), preExtractedComponents=appComponents, allowCrashes=False)
             if not success:
                 prettyPrint("An error occurred while testing the APK \"%s\". Skipping" % self.processTarget, "warning")
-                # 5.b. Download the introspy.db
-                prettyPrint("Downloading the Introspy database to \"%s\"" % introspyDBName, "warning")
-                subprocess.Popen(self.adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-                # 5.c. Uninstall the app
-                prettyPrint("Uninstalling \"%s\" from \"%s\"" % (appComponents["package_name"], adbID), "warning")
-                subprocess.Popen(self.appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                #subprocess.Popen(genymotionPowerOffCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-                #genyProcess.kill()
                 return False
 
-            # 5.d. Download the introspy.db
-            prettyPrint("Downloading the Introspy database to \"%s\"" % introspyDBName)
-            subprocess.Popen(self.adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
+            # 5. Dump the system log to file
+            logcatFile = open(self.processTarget.replace(".apk", ".log"), "w")
+            prettyPrint("Dumping logcat")
+            subprocess.Popen(dumpLogcatCmd, stderr=subprocess.STDOUT, stdout=logcatFile).communicate()[0]
+            logcatFile.close()
 
-            # 5.e. Uninstall the app
-            prettyPrint("Uninstalling \"%s\" from \"%s\"" % (appComponents["package_name"], adbID))
-            subprocess.Popen(self.appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
-            
+            # 6. Filter droidmon entries related to the APK under test
+            prettyPrint("Retrieving \"Droidmon-apimonitor-%s\" tags from log" % appComponents["package_name"])
+            catlog = subprocess.Popen(("cat", logcatFile.name), stdout=subprocess.PIPE)
+            try:
+                output = subprocess.check_output(("grep", "-i", "droidmon-apimonitor-%s" % appComponents["package_name"]), stdin=catlog.stdout)
+            except subprocess.CalledProcessError as cpe:
+                prettyPrint("Could not find the tag \"droidmon-apimonitor-%s in the logs" % appComponents["package_name"], "warning")
+                return True
+            logFile = open("%s_filtered.log" % self.processTarget.replace(".apk", ""), "w")
+            logFile.write(output)
+            logFile.close()
+            os.remove(logcatFile.name)           
+ 
         except Exception as e:
             prettyPrintError(e)
 
@@ -146,17 +115,11 @@ class DroidutanAnalysis(Process):
 
     def stop(self):
         """
-        Stops this analysis process after downloading the introspy database and uninstalling the app under test
+        Stops this analysis process
         """
         try:
             prettyPrint("Stopping the analysis process \"%s\" on \"%s\"" % (self.processName, self.processVM), "warning")
-            #prettyPrint("Downloading the Introspy database", "warning")
-           # subprocess.Popen(self.adbPullCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).communicate()[0]
-            # Uninstall the app
-            #prettyPrint("Uninstalling app", "warning")
-            #subprocess.Popen(self.appUninstallCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
             os.kill(os.getpid(), signal.SIGTERM)
-            #self.terminate() # Terminate process: Is it better/cleaner?
 
         except Exception as e:
             prettyPrintError(e)
