@@ -10,12 +10,12 @@ We are still experimenting with the applicability of such an idea, hence the lac
 
 Aion utilizes various tools including:
 
-- [androguard][https://github.com/androguard/androguard]: for static analysis of APK's and retrieval of components and other metadata
-- [Genymotion][https://www.genymotion.com/fun-zone/]: we rely on Genymotion to run AVD on which apps are tested and monitored.
-- [Droidbot][http://honeynet.github.io/droidbot/report_com.yelp.android/]: used as an option for randomly-interacting with an APK-under-test.
-- [droidmon][https://github.com/idanr1986/droidmon]: keeps track of the app's runtime behavior in the form of API calls it issues.
-- [Droidutan][https://github.com/aleisalem/droidutan]: a "homemade", less fancy equivalent to Droidbot.
-- [scikit-learn][scikit-learn.org]: the main provider of machine learning algorithms.
+- [androguard](https://github.com/androguard/androguard): for static analysis of APK's and retrieval of components and other metadata
+- [Genymotion](https://www.genymotion.com/fun-zone/): we rely on Genymotion to run AVD on which apps are tested and monitored.
+- [Droidbot](http://honeynet.github.io/droidbot): used as an option for randomly-interacting with an APK-under-test.
+- [droidmon](https://github.com/idanr1986/droidmon): keeps track of the app's runtime behavior in the form of API calls it issues.
+- [Droidutan](https://github.com/aleisalem/droidutan): a "homemade", less fancy equivalent to Droidbot.
+- [scikit-learn](scikit-learn.org): the main provider of machine learning algorithms.
 ### Support or Contact
 
 Please feel free to pull/fork the repository. We kindly ask you to cite us, if anything useful comes out of your endeavors.
