@@ -1,37 +1,25 @@
-## Welcome to GitHub Pages
+## Welcome to Aion
 
-You can use the [editor on GitHub](https://github.com/aleisalem/Aion/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+Aion is a framework (under construction) meant to apply the notion of active learning to the problem of stimulation, analysis, and detection of Android repackaged/piggybacked malware.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+In a nutshell, the framework is developed as a set of tools and utilites categorized according to their objective. For example, [data_inference] contains different machine learning feature extraction, feature selection, and classification modules and methods. Those utilities are used as an API by tools residing under the [tools] directory.
 
-### Markdown
+We are still experimenting with the applicability of such an idea, hence the lack of proper documentation.
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+### Requirements
 
-```markdown
-Syntax highlighted code block
+Aion utilizes various tools including:
 
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/aleisalem/Aion/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
+- [androguard][https://github.com/androguard/androguard]: for static analysis of APK's and retrieval of components and other metadata
+- [Genymotion][https://www.genymotion.com/fun-zone/]: we rely on Genymotion to run AVD on which apps are tested and monitored.
+- [Droidbot][http://honeynet.github.io/droidbot/report_com.yelp.android/]: used as an option for randomly-interacting with an APK-under-test.
+- [droidmon][https://github.com/idanr1986/droidmon]: keeps track of the app's runtime behavior in the form of API calls it issues.
+- [Droidutan][https://github.com/aleisalem/droidutan]: a "homemade", less fancy equivalent to Droidbot.
+- [scikit-learn][scikit-learn.org]: the main provider of machine learning algorithms.
 ### Support or Contact
 
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+Please feel free to pull/fork the repository. We kindly ask you to cite us, if anything useful comes out of your endeavors.
+
+You can get in touch with the contributor of this repository via [salem@in.tum.de].
+
+Happy hunting. :)
