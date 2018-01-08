@@ -291,9 +291,8 @@ def extractDroidmonFeatures(logPath, mode="classes"):
         elif mode == "methods":
             source = droidmonDefaultMethods
         elif mode == "both":
-            for c in droidmonDefaultHooks:
-                for m in droidmonDefaultHooks[c]:
-                    source.append("%s.%s" % (c, m))
+            source = droidmonDefaultAPIs
+
         # The loop
         for i in source:
             features.append(trace.count(i))
