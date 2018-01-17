@@ -71,7 +71,7 @@ def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
                 K = int(c.split('-')[-1])
                 clf = neighbors.KNeighborsClassifier(n_neighbors=K)
             elif c.lower().find("svm") != -1:
-                clf = svm.SVC(kernel='linear', C=1)
+                clf = svm.LinearSVC(C=1)
             elif c.lower().find("forest") != -1:
                 E = int(c.split('-')[-1])
                 clf = ensemble.RandomForestClassifier(n_estimators=E,)
@@ -334,15 +334,13 @@ def predictAndTestKFoldSVMSSK(X, y, Xtest, ytest, kfold=10, subseqLength=3, sele
  
     return predicted, predicted_test
 
-def predictKFoldSVM(X, y, kernel="linear", C=1, selectKBest=0, kfold=10):
+def predictKFoldSVM(X, y, C=1, selectKBest=0, kfold=10):
     """
     Classifies the data using Support vector machines and k-fold CV
     :param X: The matrix of feature vectors
     :type X: list
     :param y: The vector containing the labels corresponding to feature vectors
     :type y: list
-    :param kernel: The kernel used to elevate data into higher dimensionalities
-    :type kernel: str
     :param C: The penalty parameter of the error term
     :type C: int
     :param selectKBest: The number of best features to select
@@ -355,7 +353,7 @@ def predictKFoldSVM(X, y, kernel="linear", C=1, selectKBest=0, kfold=10):
         # Prepare data 
         X, y = numpy.array(X), numpy.array(y)
         # Define classifier
-        clf = svm.SVC(kernel=kernel, C=C)
+        clf = svm.LinearSVC(C=C)
         # Select K Best features if enabled
         X_new = SelectKBest(chi2, k=selectKBest).fit_transform(X, y) if selectKBest > 0 else X
         predicted = cross_val_predict(clf, X_new, y, cv=kfold).tolist()
@@ -365,7 +363,7 @@ def predictKFoldSVM(X, y, kernel="linear", C=1, selectKBest=0, kfold=10):
 
     return predicted
 
-def predictAndTestSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0):
+def predictAndTestSVM(X, y, Xtest, ytest, C=1, selectKBest=0):
     """
     Trains a SVM using the training data and tests it using the test data using K-fold cross validation
     :param X: The matrix of training feature vectors
@@ -376,8 +374,6 @@ def predictAndTestSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0):
     :type Xtest: list
     :param ytest: The labels corresponding to the test feature vectors
     :type ytest: list
-    :param kernel: The kernel used by the traing SVM's
-    :type kernel: str
     :param C: The penalty parameter of the error term
     :type C: int
     :param selectKBest: The number of best features to select
@@ -389,7 +385,7 @@ def predictAndTestSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0):
     try:
         predicted, predicted_test = [], []
         # Define classifier and cross validation iterator
-        clf = svm.SVC(kernel=kernel, C=C)
+        clf = svm.LinearSVC(C=C)
         # Start the cross validation learning
         X, y, Xtest, ytest = numpy.array(X), numpy.array(y), numpy.array(Xtest), numpy.array(ytest)
         # Select K Best features if enabled
@@ -412,7 +408,7 @@ def predictAndTestSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0):
     return predicted, predicted_test
 
 
-def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest=0, kfold=10):
+def predictAndTestKFoldSVM(X, y, Xtest, ytest, C=1, selectKBest=0, kfold=10):
     """
     Trains a SVM using the training data and tests it using the test data using K-fold cross validation
     :param X: The matrix of training feature vectors
@@ -423,8 +419,6 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest
     :type Xtest: list
     :param ytest: The labels corresponding to the test feature vectors
     :type ytest: list
-    :param kernel: The kernel used by the traing SVM's
-    :type kernel: str
     :param C: The penalty parameter of the error term
     :type C: int
     :param selectKBest: The number of best features to select
@@ -436,7 +430,7 @@ def predictAndTestKFoldSVM(X, y, Xtest, ytest, kernel="linear", C=1, selectKBest
     try:
         predicted, predicted_test = [-1] * len(y), []
         # Define classifier and cross validation iterator
-        clf = svm.SVC(kernel=kernel, C=C)
+        clf = svm.LinearSVC(C=C)
         kf = KFold(n_splits=kfold)
         # Start the cross validation learning
         Xtest, ytest = numpy.array(Xtest), numpy.array(ytest)
