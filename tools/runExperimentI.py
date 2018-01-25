@@ -17,8 +17,6 @@ from droidutan import Droidutan
 
 import os, sys, glob, shutil, argparse, subprocess, sqlite3, time, threading, pickledb, random
 
-
-
 def defineArguments():
     parser = argparse.ArgumentParser(prog="runExperimentI.py", description="A tool to implement the stimulation-detection feedback loop using Garfield as stimulation engine.")
     parser.add_argument("-x", "--malwaredir", help="The directory containing the malicious APK's to analyze and use as training/validation dataset", required=True)
@@ -51,6 +49,7 @@ def main():
 
         iteration = 1 # Initial values
         reanalysis = False
+        appTraces = {}
         currentMetrics = {"accuracy": 0.0, "recall": 0.0, "specificity": 0.0, "precision": 0.0, "f1score": 0.0}
         previousMetrics = {"accuracy": -1.0, "recall": -1.0, "specificity": -1.0, "precision": -1.0, "f1score": -1.0}
         reanalyzeMalware, reanalyzeGoodware = [], [] # Use this as a cache until conversion
@@ -245,6 +244,10 @@ def main():
                     if arguments.featuretype == "dynamic" or arguments.featuretype == "hybrid":
                         trace, dynamicFeatures = extractDroidmonFeatures(inFile)
                         prettyPrint("Successfully extracted %s dynamic features" % len(dynamicFeatures))
+                        # Keeping track of trace changes
+                        if app not in appTraces.keys():
+                            appTraces[app] = []
+                        appTraces[app].append((iteration, trace))
 
                     # 3. Store the features
                     if arguments.featuretype == "static" and len(staticFeatures) > 0:
@@ -499,7 +502,7 @@ def main():
             iteration += 1
             
         # Final Results
-        prettyPrint("Training results after %s iterations" % iteration, "output")
+        prettyPrint("Training results after %s iterations" % iteration-1, "output")
         prettyPrint("Accuracy: %s" % currentMetrics["accuracy"], "output")
         prettyPrint("Recall: %s" % currentMetrics["recall"], "output")
         prettyPrint("Specificity: %s" % currentMetrics["specificity"], "output")
@@ -511,6 +514,11 @@ def main():
 
         # Don't forget to save and close the Aion database
         aionDB.close()
+ 
+        # Dump the traces dictionary to file
+        f = open("experiment1_run%s_%s_traces.txt" % (arguments.runnumber, arguments.analysisengine), "w")
+        f.write(str(appTraces))
+        f.close()
 
     except Exception as e:
         prettyPrintError(e)
