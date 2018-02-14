@@ -18,7 +18,7 @@ class DroidutanAnalysis(Process):
     """
     Represents a Droidutan-driven test of an APK
     """
-    def __init__(self, pID, pName, pVM, pTarget, pDuration=60):
+    def __init__(self, pID, pName, pVM, pTarget, pDuration=60, pLogName=""):
         """
         Initialize the test
         :param pID: Used to identify the process
@@ -38,6 +38,7 @@ class DroidutanAnalysis(Process):
         self.processVM = pVM
         self.processTarget = pTarget
         self.processDuration = pDuration
+        self.processLogFile = pLogName
 
     def run(self):
         """
@@ -102,7 +103,10 @@ class DroidutanAnalysis(Process):
             except subprocess.CalledProcessError as cpe:
                 prettyPrint("Could not find the tag \"droidmon-apimonitor-%s in the logs" % appComponents["package_name"], "warning")
                 return True
-            logFile = open("%s_filtered.log" % self.processTarget.replace(".apk", ""), "w")
+            if self.processLogFile != "":
+                logFile = open(self.processLogFile, "w")
+            else:
+                logFile = open("%s_filtered.log" % self.processTarget.replace(".apk", ""), "w")
             logFile.write(output)
             logFile.close()
             os.remove(logcatFile.name)           

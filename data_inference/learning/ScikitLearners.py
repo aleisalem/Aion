@@ -43,7 +43,7 @@ def calculateMetrics(truth, predicted):
 
     return metrics
 
-def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
+def predictAndTestEnsemble(X, y, Xtest=[], ytest=[], classifiers=[], selectKBest=0):
     """
     Trains an Ensemble of classifiers (with default params) and using a training dataset, 
     and returns majority vote using the same training dataset and an out-of-sample test dataset
@@ -74,7 +74,7 @@ def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
                 clf = svm.LinearSVC(C=1)
             elif c.lower().find("forest") != -1:
                 E = int(c.split('-')[-1])
-                clf = ensemble.RandomForestClassifier(n_estimators=E,)
+                clf = ensemble.RandomForestClassifier(n_estimators=E)
             # Add to list
             ensembleClassifiers.append((c, clf))
         # Select K Best features if applicable
@@ -87,8 +87,11 @@ def predictAndTestEnsemble(X, y, Xtest, ytest, classifiers=[], selectKBest=0):
         prettyPrint("Validating model")
         predicted = voting.predict(X_new)
         # Same for the test dataset
-        prettyPrint("Testing the model")
-        predicted_test = voting.predict(Xtest_new)
+        if len(Xtest) > 1 and len(ytest) > 1 and len(Xtest) == len(ytest):
+            prettyPrint("Testing model")
+            predicted_test = clf.predict(Xtest_new)
+        else:
+            predicted_test = []
 
     except Exception as e:
         prettyPrintError(e) 
@@ -126,7 +129,7 @@ def predictKFoldKNN(X, y, K=10, kfold=10, selectKBest=0):
 
     return predicted
 
-def predictAndTestKNN(X, y, Xtest, ytest, K=10, selectKBest=0):
+def predictAndTestKNN(X, y, Xtest=[], ytest=[], K=10, selectKBest=0):
     """
     Trains a K-NN using the training data and tests it using the test data using K-fold cross validation
     :type X: list
@@ -140,7 +143,7 @@ def predictAndTestKNN(X, y, Xtest, ytest, K=10, selectKBest=0):
     :type K: int
     :param selectKBest: The number of best features to select
     :type selectKBest: int
-    :return: Two lists of the validation and test accuracies across the k-folds
+    :return: Two lists of the validation and test accuracies and the trained classifier
     """
     try:
         predicted, predicted_test = [], []
@@ -158,14 +161,17 @@ def predictAndTestKNN(X, y, Xtest, ytest, K=10, selectKBest=0):
         # Validate and test model
         prettyPrint("Validating model using training data")
         predicted = clf.predict(X_new)
-        prettyPrint("Testing model")
-        predicted_test = clf.predict(Xtest_new)
+        if len(Xtest) > 1 and len(ytest) > 1 and len(Xtest) == len(ytest):
+            prettyPrint("Testing model")
+            predicted_test = clf.predict(Xtest_new)
+        else:
+            predicted_test = []
 
     except Exception as e:
         prettyPrintError(e)
-        return [], []
+        return None, [], []
 
-    return predicted, predicted_test
+    return clf, predicted, predicted_test
 
 
 def predictAndTestKFoldKNN(X, y, Xtest, ytest, K=10, kfold=10, selectKBest=0):
@@ -363,7 +369,7 @@ def predictKFoldSVM(X, y, C=1, selectKBest=0, kfold=10):
 
     return predicted
 
-def predictAndTestSVM(X, y, Xtest, ytest, C=1, selectKBest=0):
+def predictAndTestSVM(X, y, Xtest=[], ytest=[], C=1, selectKBest=0):
     """
     Trains a SVM using the training data and tests it using the test data using K-fold cross validation
     :param X: The matrix of training feature vectors
@@ -380,7 +386,7 @@ def predictAndTestSVM(X, y, Xtest, ytest, C=1, selectKBest=0):
     :type selectKBest: int
     :param kfold: The number of folds to use in K-fold CV
     :type kfold: int
-    :return: Two lists of the validation and test accuracies across the 10 folds
+    :return: Two lists of the validation and test accuracies and the trained classifier
     """
     try:
         predicted, predicted_test = [], []
@@ -398,14 +404,17 @@ def predictAndTestSVM(X, y, Xtest, ytest, C=1, selectKBest=0):
         # Validate and test model
         prettyPrint("Validating model using training data")
         predicted = clf.predict(X_new)
-        prettyPrint("Testing model")
-        predicted_test = clf.predict(Xtest_new)
+        if len(Xtest) > 1 and len(ytest) > 1 and len(Xtest) == len(ytest):
+            prettyPrint("Testing model")
+            predicted_test = clf.predict(Xtest_new)
+        else:
+            predicted_test = []
 
     except Exception as e:
         prettyPrintError(e)
-        return [], []
+        return None, [], []
 
-    return predicted, predicted_test
+    return clf, predicted, predicted_test
 
 
 def predictAndTestKFoldSVM(X, y, Xtest, ytest, C=1, selectKBest=0, kfold=10):
@@ -510,7 +519,7 @@ def predictKFoldRandomForest(X, y, estimators=10, criterion="gini", maxdepth=Non
 
     return predicted
 
-def predictAndTestRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gini", maxdepth=None, selectKBest=0):
+def predictAndTestRandomForest(X, y, Xtest=[], ytest=[], estimators=10, criterion="gini", maxdepth=None, selectKBest=0):
     """
     Trains a tree using the training data and tests it using the test data using K-fold cross validation
     :param Xtr: The matrix of training feature vectors
@@ -527,7 +536,7 @@ def predictAndTestRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gin
     :type maxdepth: int
     :param selectKBest: The number of best features to select
     :type selectKBest: int 
-    :return: Two lists of the validation and test accuracies across the 10 folds
+    :return: Two lists of the validation and test accuracies and the trained classifier
     """
     try:
         predicted, predicted_test = [], []
@@ -545,14 +554,17 @@ def predictAndTestRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gin
         # Validate and test model
         prettyPrint("Validating model using training data")
         predicted = clf.predict(X_new)
-        prettyPrint("Testing model")
-        predicted_test = clf.predict(Xtest_new)
+        if len(Xtest) > 1 and len(ytest) > 1 and len(Xtest) == len(ytest):
+            prettyPrint("Testing model")
+            predicted_test = clf.predict(Xtest_new)
+        else:
+            predicted_test = []
 
     except Exception as e:
         prettyPrintError(e)
-        return [], []
+        return None, [], []
     
-    return predicted, predicted_test
+    return clf, predicted, predicted_test
 
 
 def predictAndTestKFoldRandomForest(X, y, Xtest, ytest, estimators=10, criterion="gini", maxdepth=None, selectKBest=0, kfold=10):

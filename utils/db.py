@@ -95,17 +95,17 @@ class AionDB():
         Executes a SQL query passed as a string
         :param query: The SQL query to execute
         :type query: str
-        :return: A bool depicting the success/failure of the query
+        :return: A cursor of the results set or None
         """
         try:
             if verboseON():
                 prettyPrint("Executing query: %s" % query, "debug")
-            self.conn.execute(query)
+            results = self.conn.execute(query)
         except Exception as e:
             prettyPrintError(e)
-            return False
+            return None
 
-        return True
+        return results
 
     def insert(self, table, columns, values):
         """
