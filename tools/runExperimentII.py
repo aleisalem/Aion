@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 from Aion.data_generation.reconstruction import *
-from Aion.data_inference.learning import HMM, ScikitLearners
+from Aion.data_generation.stimulation import *
+from Aion.data_inference.learning import ScikitLearners
 from Aion.data_inference.extraction.featureExtraction import *
 from Aion.utils.data import *     # Needed for accessing configuration files
 from Aion.utils.graphics import * # Needed for pretty printing
@@ -11,8 +12,7 @@ from Aion.shared.DroidutanTest import * # The Droidutan-driven test thread
 from Aion.shared.DroidbotTest import * # The Droidbot-driven test thread
 
 from sklearn.metrics import *
-import numpy, ghmm
-import introspy, hashlib # Used for analysis of introspy generated databases
+import hashlib, pickle
 from droidutan import Droidutan
 
 import os, sys, glob, shutil, argparse, subprocess, sqlite3, time, threading, pickledb, random
@@ -95,7 +95,7 @@ def main():
             # Update the iteration number
             aionDB.update("run", [("runIterations", str(iteration))], [("runID", arguments.runnumber), ("runDataset", arguments.datasetname)]) # UPDATE run SET runIterations=X WHERE runID=[runnumber]
             if arguments.analyzeapks == "yes":
-                allAPKs = malTraining + goodTraining + malTest + goodTest # if not reanalysis else reanalyzeMalware + reanalyzeGoodware
+                allAPKs = malTraining + goodTraining + malTest + goodTest if not reanalysis else reanalyzeMalware + reanalyzeGoodware + malTest + goodTest
                 ########################
                 ## Main Analysis Loop ##
                 ########################
@@ -143,8 +143,8 @@ def main():
                     # Step 4. Start the analysis thread
                     pID = int(time.time())
                     if arguments.analysisengine == "droidutan":
-                        if currentAPK in malTest or currentAPK in goodTest:
-                            p = DroidutanAnalysis(pID, currentVM, currentVM, currentAPK, int(arguments.analysistime), "%s_test_itn%s_filtered.log" % (currentAPK, iteration))
+                        if currentAPK in malTest+goodTest:
+                            p = DroidutanAnalysis(pID, currentVM, currentVM, currentAPK, int(arguments.analysistime), currentAPK.replace(".apk", "_test_itn%s_filtered.log" % iteration))
                         else:
                             p = DroidutanAnalysis(pID, currentVM, currentVM, currentAPK, int(arguments.analysistime))
                     elif arguments.analysisengine == "droidbot":
@@ -175,7 +175,7 @@ def main():
                 for app in allApps:
                     # 0. Retrieve the database file corresponding to the app
                     if app in malTest+goodTest:
-                        inFile = app.replace(".apk", "test_itn%s_filtered.log" % iteration)
+                        inFile = app.replace(".apk", "_test_itn%s_filtered.log" % iteration) # if arguments.analysisengine == "droidutan" else TODO
                     else:
                         inFile = app.replace(".apk", "_filtered.log") if arguments.analysisengine == "droidutan" else app.replace(".apk", "_droidbot/logcat_filtered.log")
 
@@ -185,7 +185,7 @@ def main():
                         continue
 
                     # 2. Extract and save numerical features
-                    prettyPrint("Extracting %s features from APK" % arguments.featuretype)
+                    prettyPrint("Extracting %s features from APK \"%s\"" % (arguments.featuretype, inFile))
                     staticFeatures, dynamicFeatures = [], []
                     # Save time in case of dynamic features
                     if arguments.featuretype == "static" or arguments.featuretype == "hybrid":
@@ -205,7 +205,7 @@ def main():
                            
                     # 4. Write features to file
                     if app in malTest+goodTest:
-                        featuresFile = open(app.replace(".apk", "test_itn%s.%s" % (iteration, arguments.featuretype)), "w")
+                        featuresFile = open(app.replace(".apk", "_test_itn%s.%s" % (iteration, arguments.featuretype)), "w")
                     else:
                         featuresFile = open(app.replace(".apk", ".%s" % arguments.featuretype), "w")
                     featuresFile.write("%s\n" % str(features))
@@ -225,7 +225,7 @@ def main():
             # Split the loaded feature files as training and test 
             Xtr, ytr = [], []
             for ff in allFeatureFiles:
-                fileName = ff.replace(".%s" % arguments.fileextension, ".apk")
+                fileName = ff.replace(".%s" % arguments.featuretype, ".apk")
                 x = Numerical.loadNumericalFeatures(ff)
                 if len(x) < 1:
                     prettyPrint("Empty feature vector returned. Skipping", "warning")
@@ -243,15 +243,14 @@ def main():
             # Training using Trees #
             ########################
             # Classifying using Random Forests
-            prettyPrint("Classifying using Random Forests with %s estimators" % e)
-            clfFile = "%s/db/Trees%s_run%s_itn%s_hybrid.txt" % (getProjectDir(), arguments.estimator, arguments.runnumber, iteration)
-            clfFile_dyn = "%s/db/Trees%s_run%s_itn%s_dynamic.txt" % (getProjectDir(), arguments.estimator, arguments.runnumber, iteration)
+            prettyPrint("Classifying using Random Forests with %s estimators" % arguments.estimators)
+            clfFile = "%s/db/Trees%s_run%s_itn%s_%s.txt" % (getProjectDir(), arguments.estimators, arguments.runnumber, iteration, arguments.featuretype)
             # Train and predict
             clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, estimators=int(arguments.estimators), selectKBest=int(arguments.selectkbest))
             # Write to file
             open(clfFile, "w").write(pickle.dumps(clf))
             metrics = ScikitLearners.calculateMetrics(ytr, predicted)
-            metricsDict["Trees%s_itn%s" % (arguments.estimators, iteration)] = metrics
+            metricsDict = metrics
 
             # Print and save results
             prettyPrint("Metrics using Trees%s at iteration %s" % (arguments.estimators, iteration), "output")
@@ -264,7 +263,7 @@ def main():
             tstamp = getTimestamp(includeDate=True)
             learnerID = "Trees%s_run%s_itn%s" % (arguments.estimators, arguments.runnumber, iteration)
             aionDB.insert(table="learner", columns=["lrnID", "lrnParams"], values=[learnerID, clfFile])
-            aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TRAIN", str(metricsDict["accuracy"]), str(metricsDict["recall"]), str(metricsDict["specificity"]),str( metricsDict["precision"]), str(metricsDict["f1score"])])
+            aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TRAIN", str(metricsDict["accuracy"]), str(metricsDict["recall"]), str(metricsDict["specificity"]), str(metricsDict["precision"]), str(metricsDict["f1score"])])
 
             # Save incorrectly-classified training instances for re-analysis
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
@@ -272,9 +271,9 @@ def main():
                 if predicted[index] != ytr[index]:
                     # malware instances are in hashes whereas this appends their package names to the list. Update either!!
                     if allFeatureFiles[index].find("malware") != -1:
-                        reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
+                        reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
                     else:
-                        reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.fileextension, "apk"))
+                        reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
 
             prettyPrint("Reanalyzing %s benign apps and %s malicious apps" % (len(reanalyzeGoodware), len(reanalyzeMalware)), "debug")
 
@@ -361,13 +360,13 @@ def main():
         P, N = 0.0, 0.0
         TP_maj, TN_maj, FP_maj, FN_maj = 0.0, 0.0, 0.0, 0.0 # To keep track of majority vote classification
         TP_one, TN_one, FP_one, FN_one = 0.0, 0.0, 0.0, 0.0 # To keep track of one-instance classification
-        for app in malTest+malGood:
+        for app in malTest + goodTest:
             prettyPrint("Processing test app \"%s\"" % app)
             # 2.a.  Retrieve all feature vectors up to [iteration]
             appVectors = {}
-            for i in range(1, iteration):
-                 if os.path.exists(app.replace(".apk", "test_itn%s.%s" % (i, arguments.featuretype))):
-                     v = loadNumericalFeatures(app.replace(".apk", "test_itn%s.%s" % (i, arguments.featuretype)))
+            for i in range(1, bestItn+1):
+                 if os.path.exists(app.replace(".apk", "_test_itn%s.%s" % (i, arguments.featuretype))):
+                     v = Numerical.loadNumericalFeatures(app.replace(".apk", "_test_itn%s.%s" % (i, arguments.featuretype)))
                      if len(v) > 1:
                          appVectors["itn%s" % i] = v
 
@@ -377,17 +376,17 @@ def main():
                
             prettyPrint("Successfully retrieved %s feature vectors of type \"%s\"" % (len(appVectors), arguments.featuretype))
             # 2.b. Classify each feature vector using the loaded classifier
-            appLabel = 1 if app.lower().find("malicious") != -1 else 0
+            appLabel = 1 if app in malTest else 0
             if appLabel == 1:
                 P += 1.0
             else:
                 N += 1.0
-            labels = ["Malicious", "Benign"]
+            labels = ["Benign", "Malicious"]
             appMalicious, appBenign = 0.0, 0.0
             for v in appVectors:
                 predictedLabel = clf.predict(appVectors[v]).tolist()[0]
-                prettyPrint("%s app was classified as %s according to iteration %s" % (labels[appLabel], labels[predictedLabel], v.replace("itn", "")), "output")
-                aionDB.insert("testapp", ["taName", "taRun", "taType", "taLog"], [app, arguments.runnumber, labels[appLabel],app.replace(".apk", "test_%s.%s" % (v, arguments.featuretype))])
+                prettyPrint("\"%s\" app was classified as \"%s\" according to iteration %s" % (labels[appLabel], labels[predictedLabel], v.replace("itn", "")), "output")
+                aionDB.insert("testapp", ["taName", "taRun", "taType", "taLog"], [app, arguments.runnumber, labels[appLabel],app.replace(".apk", "_test_%s_filtered.log" % v)])
                 if predictedLabel == 1:
                     appMalicious += 1.0
                 else:
@@ -417,22 +416,22 @@ def main():
                 else:
                     TN_one += 1.0
             # 2.d. Declare the classification of the app in question
-            prettyPrint("%s app has been declared as %s by majority vote and %s by one-instance votes" % (labels[appLabel], labels[majorityLabel], labels[oneLabel]), "output")
+            prettyPrint("\"%s\" app has been declared as \"%s\" by majority vote and as \"%s\" by one-instance votes" % (labels[appLabel], labels[majorityLabel], labels[oneLabel]), "output")
 
         # 3. Calculate metrics
         accuracy_maj, accuracy_one = (TP_maj+TN_maj)/(P+N), (TP_one+TN_one)/(P+N)
         recall_maj, recall_one = TP_maj/P, TP_one/P
         specificity_maj, specificity_one = TN_maj/N, TN_one/N
         precision_maj, precision_one = TP_maj/(TP_maj+FP_maj), TP_one/(TP_one+FP_one)
-        f1score_maj, f1score_one = 2 * (precision_maj/recall_maj) / (precision_maj+recall_maj), 2 * (precision_one/recall_one) / (precision_one+recall_one)
+        f1score_maj, f1score_one = 2 * (precision_maj*recall_maj) / (precision_maj+recall_maj), 2 * (precision_one*recall_one) / (precision_one+recall_one)
 
         # 4. Display and store metrics
         prettyPrint("Test metrics using Trees%s at run %s" % (arguments.estimators, arguments.runnumber), "output")
-        prettyPrint("Accuracy (majority): %s versus accuracy (one-instance)" % (str(accuracy_maj), str(accuracy_one)), "output")
-        prettyPrint("Recall (majority): %s versus recall (one-instance)" % (str(recall_maj), str(recall_one)), "output")
-        prettyPrint("Specificity (majority): %s versus specificity (one-instance)" % (str(specificity_maj), str(specificity_one)), "output")
-        prettyPrint("Precision (majority): %s versus precision (one-instance)" % (str(precision_maj), str(precision_one)), "output")
-        prettyPrint("F1 Score (majority): %s versus F1 score (one-instance)" % (str(f1scorey_maj), str(f1score_one)), "output")
+        prettyPrint("Accuracy (majority): %s versus accuracy (one-instance): %s" % (str(accuracy_maj), str(accuracy_one)), "output")
+        prettyPrint("Recall (majority): %s versus recall (one-instance): %s" % (str(recall_maj), str(recall_one)), "output")
+        prettyPrint("Specificity (majority): %s versus specificity (one-instance): %s" % (str(specificity_maj), str(specificity_one)), "output")
+        prettyPrint("Precision (majority): %s versus precision (one-instance): %s" % (str(precision_maj), str(precision_one)), "output")
+        prettyPrint("F1 Score (majority): %s versus F1 score (one-instance): %s" % (str(f1score_maj), str(f1score_one)), "output")
         
         # 4.b. Store in the database
         aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[bestClassifier, bestItn, arguments.runnumber, tstamp, arguments.featuretype, "TEST:Maj", accuracy_maj, recall_maj, specificity_maj, precision_maj, f1score_maj])

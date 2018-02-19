@@ -1,5 +1,5 @@
 CREATE TABLE learner( 
-    lrnID		TEXT PRIMARY KEY, 
+    lrnID			TEXT PRIMARY KEY, 
     lrnParams		TEXT
 );
 
@@ -7,19 +7,19 @@ CREATE TABLE run(
     runID       	INTEGER, 
     runDataset  	TEXT,
     runStart  		TEXT,
-    runEnd		TEXT,
+    runEnd			TEXT,
     runIterations	INTEGER,
     PRIMARY KEY (runID, runDataset)
 );
 
-CREATE TABLE datapoint ( 
+CREATE TABLE datapoint( 
     dpID        	INTEGER PRIMARY KEY AUTOINCREMENT, 
     dpLearner		TEXT,
     dpIteration		INTEGER,
-    dpRun		INTEGER,
+    dpRun			INTEGER,
     dpTimestamp 	TEXT,
-    dpFeature           TEXT,
-    dpType          	TEXT,
+    dpFeature       TEXT,
+    dpType          TEXT,
     dpAccuracy		REAL,
     dpRecall		REAL,
     dpSpecificity	REAL,
@@ -29,11 +29,12 @@ CREATE TABLE datapoint (
     FOREIGN KEY (dpRun) REFERENCES parent(runID)
 );
 
-CREATE TABLE testapp (
+CREATE TABLE testapp(
     taName		TEXT,
     taRun		INTEGER,
     taType		TEXT,
-    taLog		TEXT
+    taLog		TEXT,
     PRIMARY KEY (taName, taRun),
     FOREIGN KEY (taRun) REFERENCES parent(runID)
 );
+

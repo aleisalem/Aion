@@ -1,1 +1,1 @@
-__all__ = ["App", "constants", "DroidutanTest"]
+__all__ = ["App", "constants"]
