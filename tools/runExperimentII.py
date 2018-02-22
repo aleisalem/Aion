@@ -28,9 +28,9 @@ def defineArguments():
     parser.add_argument("-u", "--analysisengine", help="The stimulation/analysis engine to use", required=False, choices=["droidbot", "droidutan"], default="droidutan")
     parser.add_argument("-v", "--vmnames", help="The name(s) of the Genymotion machine(s) to use for analysis (comma-separated)", required=False, default="")
     parser.add_argument("-z", "--vmsnapshots", help="The name(s) of the snapshot(s) to restore before analyzing an APK (comma-separated)", required=False, default="")
-    parser.add_argument("-e", "--estimators", help="The number of the estimators/trees used by the random forest classifier", required=False, default=100)
+    parser.add_argument("-a", "--algorithm", help="The algorithm used to classify apps", required=False, default="Ensemble", choices=["KNN10", "KNN25", "KNN50", "KNN100", "KNN250", "KNN500", "SVM", "Trees25", "Trees50", "Trees75", "Trees100", "Ensemble"])
     parser.add_argument("-s", "--selectkbest", help="Whether to select K best features from the ones extracted from the APK's", required=False, default=0)
-    parser.add_argument("-a", "--featuretype", help="The type of features to consider during training", required=False, default="hybrid", choices=["static", "dynamic", "hybrid"])
+    parser.add_argument("-e", "--featuretype", help="The type of features to consider during training", required=False, default="hybrid", choices=["static", "dynamic", "hybrid"])
     parser.add_argument("-m", "--accuracymargin", help="The margin (in percentage) within which the training accuracy is allowed to dip", required=False, default=1)
     parser.add_argument("-i", "--maxiterations", help="The maximum number of iterations to allow", required=False, default=25)
     return parser
@@ -239,21 +239,33 @@ def main():
 
 
             metricsDict = {}
-            ########################
-            # Training using Trees #
-            ########################
-            # Classifying using Random Forests
-            prettyPrint("Classifying using Random Forests with %s estimators" % arguments.estimators)
-            clfFile = "%s/db/Trees%s_run%s_itn%s_%s.txt" % (getProjectDir(), arguments.estimators, arguments.runnumber, iteration, arguments.featuretype)
+            ############
+            # Training #
+            ############
+            # Classifying using [algorithm]
+            prettyPrint("Classifying using %s" % arguments.algorithm)
+            clfFile = "%s/db/%s_run%s_itn%s_%s.txt" % (getProjectDir(), arguments.algorithm, arguments.runnumber, iteration, arguments.featuretype)
             # Train and predict
-            clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, estimators=int(arguments.estimators), selectKBest=int(arguments.selectkbest))
+            if arguments.algorithm.lower().find("trees") != -1:
+                e = int(arguments.algorithm.replace("Trees", ""))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, estimators=e, selectKBest=int(arguments.selectkbest))
+            elif arguments.algorithm.lower().find("knn") != -1:
+                k = int(arguments.algorithm.replace("KNN", ""))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, K=k, selectKBest=int(arguments.selectkbest))
+            elif arguments.algorithm.lower().find("svm") != -1:
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, selectKBest=int(arguments.selectkbest))
+            else:
+                K = [10, 25, 50, 100, 250, 500]
+                E = [10, 25, 50, 75, 100]
+                allCs = ["KNN-%s" % k for k in K] + ["FOREST-%s" % e for e in E] + ["SVM"]
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, classifiers=allCs, selectKBest=int(arguments.selectkbest))
             # Write to file
             open(clfFile, "w").write(pickle.dumps(clf))
             metrics = ScikitLearners.calculateMetrics(ytr, predicted)
             metricsDict = metrics
 
             # Print and save results
-            prettyPrint("Metrics using Trees%s at iteration %s" % (arguments.estimators, iteration), "output")
+            prettyPrint("Metrics using %s at iteration %s" % (arguments.algorithm, iteration), "output")
             prettyPrint("Accuracy: %s" % str(metricsDict["accuracy"]), "output")
             prettyPrint("Recall: %s" % str(metricsDict["recall"]), "output")
             prettyPrint("Specificity: %s" % str(metricsDict["specificity"]), "output")
@@ -261,7 +273,7 @@ def main():
             prettyPrint("F1 Score: %s" %  str(metricsDict["f1score"]), "output")
             # Insert datapoint into the database
             tstamp = getTimestamp(includeDate=True)
-            learnerID = "Trees%s_run%s_itn%s" % (arguments.estimators, arguments.runnumber, iteration)
+            learnerID = "%s_run%s_itn%s" % (arguments.algorithm, arguments.runnumber, iteration)
             aionDB.insert(table="learner", columns=["lrnID", "lrnParams"], values=[learnerID, clfFile])
             aionDB.insert(table="datapoint", columns=["dpLearner", "dpIteration", "dpRun", "dpTimestamp", "dpFeature", "dpType", "dpAccuracy", "dpRecall", "dpSpecificity", "dpPrecision", "dpFscore"], values=[learnerID, str(iteration), arguments.runnumber, tstamp, arguments.featuretype, "TRAIN", str(metricsDict["accuracy"]), str(metricsDict["recall"]), str(metricsDict["specificity"]), str(metricsDict["precision"]), str(metricsDict["f1score"])])
 
@@ -386,7 +398,8 @@ def main():
             for v in appVectors:
                 predictedLabel = clf.predict(appVectors[v]).tolist()[0]
                 prettyPrint("\"%s\" app was classified as \"%s\" according to iteration %s" % (labels[appLabel], labels[predictedLabel], v.replace("itn", "")), "output")
-                aionDB.insert("testapp", ["taName", "taRun", "taType", "taLog"], [app, arguments.runnumber, labels[appLabel],app.replace(".apk", "_test_%s_filtered.log" % v)])
+                classifiedCorrectly = "YES" if labels[appLabel] == labels[predictedLabel] else "NO"
+                aionDB.insert("testapp", ["taName", "taRun", "taIteration", "taType", "taClassified", "taLog"], [app, arguments.runnumber, v.replace("itn", ""), labels[appLabel], classifiedCorrectly, app.replace(".apk", "_test_%s_filtered.log" % v)])
                 if predictedLabel == 1:
                     appMalicious += 1.0
                 else:
@@ -426,7 +439,7 @@ def main():
         f1score_maj, f1score_one = 2 * (precision_maj*recall_maj) / (precision_maj+recall_maj), 2 * (precision_one*recall_one) / (precision_one+recall_one)
 
         # 4. Display and store metrics
-        prettyPrint("Test metrics using Trees%s at run %s" % (arguments.estimators, arguments.runnumber), "output")
+        prettyPrint("Test metrics using %s at run %s" % (arguments.algorithm, arguments.runnumber), "output")
         prettyPrint("Accuracy (majority): %s versus accuracy (one-instance): %s" % (str(accuracy_maj), str(accuracy_one)), "output")
         prettyPrint("Recall (majority): %s versus recall (one-instance): %s" % (str(recall_maj), str(recall_one)), "output")
         prettyPrint("Specificity (majority): %s versus specificity (one-instance): %s" % (str(specificity_maj), str(specificity_one)), "output")

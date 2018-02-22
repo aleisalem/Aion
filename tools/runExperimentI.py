@@ -316,7 +316,7 @@ def main():
             K = [10, 25, 50, 100, 250, 500]
             for k in K:
                 prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
-                predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k, selectKBest=int(arguments.selectkbest))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k, selectKBest=int(arguments.selectkbest))
                 metrics = ScikitLearners.calculateMetrics(ytr, predicted)
                 metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 metricsDict["KNN%s" % k] = metrics
@@ -324,7 +324,7 @@ def main():
                 if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
                     # Same for dynamic features
                     prettyPrint("Classifying using K-nearest neighbors with K=%s and dynamic features" % k)
-                    predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtrd, ytr, Xted, yte, K=k, selectKBest=int(arguments.selectkbest))
+                    clf, predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtrd, ytr, Xted, yte, K=k, selectKBest=int(arguments.selectkbest))
                     metrics = ScikitLearners.calculateMetrics(ytr, predicted)
                     metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                     dynamicDict["KNN%s" % k] = metrics
@@ -335,7 +335,7 @@ def main():
             E = [10, 25, 50, 75, 100]
             for e in E:
                 prettyPrint("Classifying using Random Forests with %s estimators" % e)
-                predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, Xte, yte, estimators=e, selectKBest=int(arguments.selectkbest))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, Xte, yte, estimators=e, selectKBest=int(arguments.selectkbest))
                 if e == 100:
                     predicted_trees100 = [] + predicted_test.tolist()
                 metrics = ScikitLearners.calculateMetrics(ytr, predicted)
@@ -345,7 +345,7 @@ def main():
                 if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
                     # Same for dynamic features
                     prettyPrint("Classifying using Random Forests with %s estimators and dynamic features" % e)
-                    predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtrd, ytr, Xted, yte, estimators=e, selectKBest=int(arguments.selectkbest))
+                    clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtrd, ytr, Xted, yte, estimators=e, selectKBest=int(arguments.selectkbest))
                     metrics = ScikitLearners.calculateMetrics(ytr, predicted)
                     metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                     dynamicDict["Trees%s" % e] = metrics
@@ -353,7 +353,7 @@ def main():
 
             # Classifying using SVM
             prettyPrint("Classifying using Support vector machines")
-            predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, Xte, yte, selectKBest=int(arguments.selectkbest))
+            clf, predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, Xte, yte, selectKBest=int(arguments.selectkbest))
             metrics = ScikitLearners.calculateMetrics(ytr, predicted)
             metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
             metricsDict["SVM"] = metrics
@@ -361,7 +361,7 @@ def main():
             if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
                 # Same for dynamic features
                 prettyPrint("Classifying using Support vector machines and dunamic features")
-                predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtrd, ytr, Xted, yte, selectKBest=int(arguments.selectkbest))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtrd, ytr, Xted, yte, selectKBest=int(arguments.selectkbest))
                 metrics = ScikitLearners.calculateMetrics(ytr, predicted)
                 metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
                 dynamicDict["SVM"] = metrics
@@ -370,14 +370,14 @@ def main():
                 
             # Now do the majority voting ensemble
             allCs = ["KNN-%s" % x for x in K] + ["FOREST-%s" % e for e in E] + ["SVM"]
-            predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, Xte, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
+            clf, predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, Xte, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
             metrics = ScikitLearners.calculateMetrics(predicted, ytr) # Used to decide upon whether to iterate more
             metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
             metricsDict["Ensemble"] = metrics
             metricsDict_test["Ensemble"] = metrics_test
             if arguments.featuretype == "hybrid" and len(allDynamicFiles) > 1:
                 # Same for dynamic features
-                predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtrd, ytr, Xted, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
+                clf, predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtrd, ytr, Xted, yte, classifiers=allCs, selectKBest=int(arguments.selectkbest))
                 metrics = ScikitLearners.calculateMetrics(predicted, ytr) # Used to decide upon whether to iterate more
                 metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
                 dynamicDict["Ensemble"] = metrics

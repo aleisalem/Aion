@@ -97,7 +97,7 @@ def predictAndTestEnsemble(X, y, Xtest=[], ytest=[], classifiers=[], selectKBest
         prettyPrintError(e) 
         return [], []
 
-    return predicted, predicted_test
+    return voting, predicted, predicted_test
 
 def predictKFoldKNN(X, y, K=10, kfold=10, selectKBest=0):
     """

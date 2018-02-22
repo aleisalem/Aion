@@ -32,9 +32,11 @@ CREATE TABLE datapoint(
 CREATE TABLE testapp(
     taName		TEXT,
     taRun		INTEGER,
+    taIteration		INTEGER,
     taType		TEXT,
+    taClassified	TEXT,
     taLog		TEXT,
-    PRIMARY KEY (taName, taRun),
+    PRIMARY KEY (taName, taRun, taIteration),
     FOREIGN KEY (taRun) REFERENCES parent(runID)
 );
 
