@@ -330,7 +330,7 @@ def main():
         # Commence the test phase using the "best classifier" #
         #######################################################
         # 1. Retrieve the best classifier and its iteration (X)
-        results = aionDB.execute("SELECT * FROM datapoint WHERE dpRun='%s' AND dpFeature='%s' ORDER BY dpFScore" % (arguments.runnumber, arguments.featuretype))
+        results = aionDB.execute("SELECT * FROM datapoint WHERE dpRun='%s' AND dpFeature='%s' ORDER BY dpFScore DESC" % (arguments.runnumber, arguments.featuretype))
         if not results:
             prettyPrint("Could not retrieve data about the training phase. Exiting", "error")
             aionDB.close()
