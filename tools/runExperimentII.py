@@ -119,13 +119,13 @@ def main():
                                 availableVMs.append(p.name)
                                 currentProcesses.remove(p)
                                 # Also restore clean state of machine 
-                                if len(allAPKs) % 25 == 0: # TODO: How often to restore snapshot
+                                if len(allAPKs) % 25 == 0: # How often to restore snapshot?
                                     vm = p.name
                                     snapshot = allSnapshots[allVMs.index(vm)]
                                     prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
                                     restoreVirtualBoxSnapshot(vm, snapshot)
 
-                            elif checkAVDState(p.name, "stopping")[0] or checkAVDState(p.name, "powered off")[0]:
+                            elif checkAVDState(p.name, "stopping")[0] or checkAVDState(p.name, "powered off")[0] or checkAVDState(p.name, "restoring snapshot")[0]:
                                 prettyPrint("AVD \"%s\" is stuck. Forcing a restoration" % p.name, "warning")
                                 vm = p.name
                                 snapshot = allSnapshots[allVMs.index(vm)]
@@ -281,13 +281,16 @@ def main():
             reanalyzeMalware, reanalyzeGoodware = [], [] # Reset the lists to store new misclassified instances
             for index in range(len(ytr)):
                 if predicted[index] != ytr[index]:
-                    # malware instances are in hashes whereas this appends their package names to the list. Update either!!
-                    if allFeatureFiles[index].find("malware") != -1:
-                        reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
+                    if allFeatureFiles[index].find("test") != -1:
+                        prettyPrint("Skipping adding test file \"%s\" to the reanalysis lists" %  allFeatureFiles[index])
                     else:
-                        reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
+                        # Add to reanalysis lists
+                        if allFeatureFiles[index].find("malware") != -1:
+                            reanalyzeMalware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
+                        else:
+                            reanalyzeGoodware.append(allFeatureFiles[index].replace(arguments.featuretype, "apk"))
 
-            prettyPrint("Reanalyzing %s benign apps and %s malicious apps" % (len(reanalyzeGoodware), len(reanalyzeMalware)), "debug")
+            prettyPrint("Reanalyzing %s benign and %s malicious training apps" % (len(reanalyzeGoodware), len(reanalyzeMalware)), "debug")
 
             # Swapping metrics
             previousMetrics = currentMetrics
