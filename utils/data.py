@@ -2,6 +2,10 @@
 
 from Aion.conf import config
 
+def getAdminEmail():
+    """Returns the email address of the admin for notifications"""
+    return config.ADMIN_EMAIL
+
 def getAionDBPath():
     """Returns the path to the Aion DB"""
     return config.AION_DB
@@ -9,6 +13,10 @@ def getAionDBPath():
 def getAionDBRecovery():
     """Returns the path to the Aion DB recovery script"""
     return config.DB_RECOVERY
+
+def getGoogleCreds():
+    """Returns the Google Account credentials"""
+    return config.GOOGLE_LOGIN, config.GOOGLE_PASSWORD
 
 def getHashesDBPath():
     """Returns the path to the hashes DB for quick lookup of app package names"""

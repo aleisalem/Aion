@@ -4,7 +4,9 @@ from Aion.utils.data import *
 
 import random, string, os, glob, subprocess, time, re
 from datetime import datetime
-
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEText import MIMEText
 
 def averageList(inputList, roundDigits=2):
    return round(float(sum(inputList))/float(len(inputList)), roundDigits)
@@ -133,6 +135,29 @@ def restoreVirtualBoxSnapshot(vmName, snapshotName, retrials=25, waitToBoot=30):
         return False
 
     return True
+
+def sendEmail(srcAddress, dstAddress, msgSubject, msgBody):
+    try:
+        # Connect to server and login
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        username, password = getGoogleCreds()
+        server.login(username, password)
+        # Prepare message
+        msg = MIMEMultipart()
+        msg['From'] = srcAddress
+        msg['To'] = dstAddress
+        msg['Subject'] = msgSubject
+        msg.attach(MIMEText(msgBody, 'plain'))
+        # Bombs away
+        server.sendmail(srcAddress, dstAddress, msg.as_string())
+        server.quit()
+    except Exception as e:
+        print e
+        return False
+
+    return True
+    
 
 # Copied from the "googleplay_api" helpers.py
 def sizeof_fmt(num):

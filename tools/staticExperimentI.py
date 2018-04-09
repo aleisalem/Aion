@@ -22,13 +22,6 @@ def main():
         arguments = argumentParser.parse_args()
         prettyPrint("Welcome to the \"Aion\"'s static experiment I")
 
-        aionDB = AionDB(int(arguments.runnumber), arguments.datasetname)
-        algorithms = aionDB.select([], "learner", [])
-        learners = {}
-        for a in algorithms.fetchall():
-            if len(a) > 1:
-                learners[a[1].lower()] = str(a[0])
-
         # 1. Load APK's and split into training and test datasets
         prettyPrint("Loading APK's from \"%s\" and \"%s\"" % (arguments.malwaredir, arguments.goodwaredir))
         # Retrieve malware APK's
@@ -108,7 +101,7 @@ def main():
         K = [10, 25, 50, 100, 250, 500]
         for k in K:
             prettyPrint("Classifying using K-nearest neighbors with K=%s" % k)
-            predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k)
+            clf, predicted, predicted_test = ScikitLearners.predictAndTestKNN(Xtr, ytr, Xte, yte, K=k)
             metrics = ScikitLearners.calculateMetrics(ytr, predicted)
             metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
             metricsDict["KNN%s" % k] = metrics
@@ -118,7 +111,7 @@ def main():
         E = [10, 25, 50, 75, 100]
         for e in E:
             prettyPrint("Classifying using Random Forests with %s estimators" % e)
-            predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, Xte, yte, estimators=e)
+            clf, predicted, predicted_test = ScikitLearners.predictAndTestRandomForest(Xtr, ytr, Xte, yte, estimators=e)
             metrics = ScikitLearners.calculateMetrics(ytr, predicted)
             metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
             metricsDict["Trees%s" % e] = metrics
@@ -126,7 +119,7 @@ def main():
 
         # Classifying using SVM
         prettyPrint("Classifying using Support vector machines")
-        predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, Xte, yte)
+        clf, predicted, predicted_test = ScikitLearners.predictAndTestSVM(Xtr, ytr, Xte, yte)
         metrics = ScikitLearners.calculateMetrics(ytr, predicted)
         metrics_test = ScikitLearners.calculateMetrics(yte, predicted_test)
         metricsDict["SVM"] = metrics
@@ -134,7 +127,7 @@ def main():
                 
         # Now do the majority voting ensemble
         allCs = ["KNN-%s" % x for x in K] + ["FOREST-%s" % e for e in E] + ["SVM"]
-        predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, Xte, yte, classifiers=allCs)
+        clf, predicted, predicted_test = ScikitLearners.predictAndTestEnsemble(Xtr, ytr, Xte, yte, classifiers=allCs)
         metrics = ScikitLearners.calculateMetrics(predicted, ytr) # Used to decide upon whether to iterate more
         metrics_test = ScikitLearners.calculateMetrics(predicted_test, yte)
         metricsDict["Ensemble"] = metrics

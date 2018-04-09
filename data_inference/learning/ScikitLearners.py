@@ -89,7 +89,7 @@ def predictAndTestEnsemble(X, y, Xtest=[], ytest=[], classifiers=[], selectKBest
         # Same for the test dataset
         if len(Xtest) > 1 and len(ytest) > 1 and len(Xtest) == len(ytest):
             prettyPrint("Testing model")
-            predicted_test = clf.predict(Xtest_new)
+            predicted_test = voting.predict(Xtest_new)
         else:
             predicted_test = []
 

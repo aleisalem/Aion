@@ -54,7 +54,7 @@ def main():
                    appKey = appKey + ".apk"
                    appName = hashesDB.get(hashlib.sha256(appKey).hexdigest())
                    if appName == None:
-                       appName = "Unknown"
+                       appName = f[f.rfind("/")+1:f.rfind(".")]
                    
                 if f.lower().find("malware") != -1:
                     y.append(1)

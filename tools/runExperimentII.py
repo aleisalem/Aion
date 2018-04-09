@@ -306,7 +306,8 @@ def main():
             else:
                 r = range(len(vms)) # Or of snaps doesn't matter
             # Killall -9 VBoxHeadless
-            doomsdayCmd = ["killall", "-9", "VBoxHeadless"]
+            #doomsdayCmd = ["killall", "-9", "VBoxHeadless"]
+            doomsdayCmd = ["killall", "-9", "VBoxSVC"]
             subprocess.Popen(doomsdayCmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
             for i in r:
                   prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snaps[i], vms[i]))
@@ -457,8 +458,17 @@ def main():
         # Don't forget to save and close the Aion database
         aionDB.close()
 
+        # Send notification email
+        subject = "Run %s on %s Successful" % (arguments.runnumber, arguments.datasetname)
+        msg = "Achieved results:\nTest F1 score (majority): %s versus F1 score (one-instance): %s\nTest Specificity (majority): %s versus specificity (one-instance): %s" % (str(f1score_maj), str(f1score_one), str(specificity_maj), str(specificity_one))
+        sendEmail("alu-precision", getAdminEmail(), subject, msg)
+
     except Exception as e:
         prettyPrintError(e)
+        subject = "Run %s on %s failed!!" % (arguments.runnumber, arguments.datasetname)
+        msg = "Error: %s" % e
+        sendEmail("alu-precision", getAdminEmail(), subject, msg)
+
         return False
     
     prettyPrint("Good day to you ^_^")
