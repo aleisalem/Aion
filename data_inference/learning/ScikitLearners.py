@@ -99,6 +99,51 @@ def predictAndTestEnsemble(X, y, Xtest=[], ytest=[], classifiers=[], selectKBest
 
     return voting, predicted, predicted_test
 
+def predictKFoldEnsemble(X, y, classifiers=[], K=10, kfold=10, selectKBest=0):
+    """
+    Classifies the data using a voting classifier and k-fold CV
+    :param X: The list of feature vectors
+    :type X: list
+    :param y: The list of labels corresponding to the feature vectors
+    :type y: list
+    :param classifiers: The list of classifiers to use in the ensemble
+    :type classifiers: list
+    :param K: The number of nearest neighbors to consider in classification
+    :type K: int
+    :param kfold: The number of folds in the CV
+    :type kfold: int
+    :param selectKBest: The number of best features to select
+    :type selectKBest: int
+    :return: An array of predicted classes
+    """
+    try:
+        # Prepare data 
+        X, y = numpy.array(X), numpy.array(y)
+        # Define classifiers
+        ensembleClassifiers = []
+        for c in classifiers:
+            if c.lower().find("knn") != -1:
+                K = int(c.split('-')[-1])
+                clf = neighbors.KNeighborsClassifier(n_neighbors=K)
+            elif c.lower().find("svm") != -1:
+                clf = svm.LinearSVC(C=1)
+            elif c.lower().find("forest") != -1:
+                E = int(c.split('-')[-1])
+                clf = ensemble.RandomForestClassifier(n_estimators=E)
+            # Add to list
+            ensembleClassifiers.append((c, clf))
+        # Train and fit the voting classifier
+        voting = VotingClassifier(estimators=ensembleClassifiers, voting='hard')
+        # Select K Best features if enabled
+        X_new = SelectKBest(chi2, k=selectKBest).fit_transform(X, y) if selectKBest > 0 else X
+        predicted = cross_val_predict(voting, X_new, y, cv=kfold).tolist()
+
+    except Exception as e:
+        prettyPrintError(e)
+        return []
+
+    return predicted
+
 def predictKFoldKNN(X, y, K=10, kfold=10, selectKBest=0):
     """
     Classifies the data using K-nearest neighbors and k-fold CV
