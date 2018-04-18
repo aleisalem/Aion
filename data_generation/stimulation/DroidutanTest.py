@@ -39,6 +39,7 @@ class DroidutanAnalysis(Process):
         self.processTarget = pTarget
         self.processDuration = pDuration
         self.processLogFile = pLogName
+        self.success = True
 
     def run(self):
         """
@@ -113,6 +114,8 @@ class DroidutanAnalysis(Process):
  
         except Exception as e:
             prettyPrintError(e)
+            self.success = False
+            return False
 
         return True
 
@@ -127,6 +130,8 @@ class DroidutanAnalysis(Process):
 
         except Exception as e:
             prettyPrintError(e)
+            self.success = False
+            return False
 
         return True
 

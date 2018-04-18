@@ -15,7 +15,8 @@ from sklearn.metrics import *
 import hashlib, pickle
 from droidutan import Droidutan
 
-import os, sys, glob, shutil, argparse, subprocess, sqlite3, time, threading, pickledb, random
+import os, sys, glob, shutil, argparse, subprocess, sqlite3
+import time, threading, pickledb, random, exceptions
 
 def defineArguments():
     parser = argparse.ArgumentParser(prog="runExperimentI.py", description="The second type of experiments of the Aion active learning framework.")
@@ -119,7 +120,7 @@ def main():
                                 availableVMs.append(p.name)
                                 currentProcesses.remove(p)
                                 # Also restore clean state of machine 
-                                if len(allAPKs) % 25 == 0: # How often to restore snapshot?
+                                if len(allAPKs) % 100 == 0: # How often to restore snapshot?
                                     vm = p.name
                                     snapshot = allSnapshots[allVMs.index(vm)]
                                     prettyPrint("Restoring snapshot \"%s\" for AVD \"%s\"" % (snapshot, vm))
@@ -165,6 +166,12 @@ def main():
                         if not p.is_alive():
                             availableVMs.append(p.name)
                             currentProcesses.remove(p)
+                            try:
+                                if not p.success:
+                                    prettyPrint("Testing app \"%s\" failed. Re-analyzing later" % p.processTarget, "warning")
+				    allAPKs.append(p.processTarget)
+                            except exceptions.AttributeError as ae:
+                                prettyPrint("Oops!! No attribute called \"success\"", "warning")
 
                 
                 #######################################
